@@ -1,0 +1,7 @@
+[DEFAULT]
+VartaHost = 192.168.3.30
+Debug = True
+
+[AllThingsTalk]
+DeviceID = xxx
+DeviceToken = maker:xxx
