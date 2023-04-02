@@ -33,6 +33,7 @@ class VartaFunction:
             quit()
 
     def main(self):
+        print("Programmstart MAIN")
         # ATT Verbindung initialisieren
         devicetoken = self.config.get('AllThingsTalk', 'DeviceToken', fallback=None)
         deviceid = self.config.get('AllThingsTalk', 'DeviceID', fallback=None)
@@ -48,7 +49,6 @@ class VartaFunction:
         if (deviceid is None) or (len(deviceid) != 24):
             print("ATT DeviceID falsch konfiguriert?!")
         try:
-            print(api)
             self.client = Client(devicetoken, api=api)
             self.device = Varta(client=self.client, id=deviceid)
             self.ATTConnected = True
@@ -110,6 +110,7 @@ class VartaFunction:
                 js_modul_conf = json.loads(modul_conf)
 
                 # geschaft...
+                print("EMS Konfigurationsdaten erfolgreich geholt")
                 break
             except:
                 print("Fehler beim holen der EMS Konfigurationsdaten!")
@@ -162,8 +163,8 @@ class VartaFunction:
                                             js_batt_conf['Batt_Conf'][z], js_chrg_data['Charger_Data'][y][x][z]))
                             else:
                                 print("%s = %s" % (js_chrg_conf['Charger_Conf'][x], js_chrg_data['Charger_Data'][y][x]))
-            except:
-                print("Fehler beim holen der EMS Daten!")
+            except Exception as e:
+                print("Fehler beim holen der EMS Daten! - %s" % e)
 
             if self.ATTConnected:
                 self.device.ul1 = js_wr_data['WR_Data'][5]
