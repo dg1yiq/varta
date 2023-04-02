@@ -112,8 +112,8 @@ class VartaFunction:
                 # geschaft...
                 print("EMS Konfigurationsdaten erfolgreich geholt")
                 break
-            except:
-                print("Fehler beim holen der EMS Konfigurationsdaten!")
+            except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
+                print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
                 if count == 3:
                     print("Fehler beim holen der EMS Konfigurationsdaten - Program Abbruch!")
                     exit()
@@ -163,8 +163,8 @@ class VartaFunction:
                                             js_batt_conf['Batt_Conf'][z], js_chrg_data['Charger_Data'][y][x][z]))
                             else:
                                 print("%s = %s" % (js_chrg_conf['Charger_Conf'][x], js_chrg_data['Charger_Data'][y][x]))
-            except Exception as e:
-                print("Fehler beim holen der EMS Daten! - %s" % e)
+            except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
+                print("Fehler beim holen der EMS Daten! - %s" % str(e))
 
             if self.ATTConnected:
                 self.device.ul1 = js_wr_data['WR_Data'][5]
@@ -182,4 +182,14 @@ class VartaFunction:
 
 if __name__ == "__main__":
     mainprogramm = VartaFunction()
-    mainprogramm.main()
+    while True:
+        try:
+            mainprogramm.main()
+        except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
+            print("Allgemeiner Fehler, vermutlich ATT! - %s" % str(e))
+        print("Cleanup...")
+        mainprogramm.ATTConnected = False
+        mainprogramm.device = None
+        mainprogramm.client = None
+        print("Neustart in 60 Sekunden...")
+        time.sleep(60)
