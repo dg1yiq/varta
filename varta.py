@@ -7,12 +7,6 @@ from allthingstalk import Client, Device, IntegerAsset, NumberAsset
 
 # Definieren des ATT Devices mit Assets
 class Varta(Device):
-    ul1 = NumberAsset(unit='V')
-    ul2 = NumberAsset(unit='V')
-    ul3 = NumberAsset(unit='V')
-    il1 = NumberAsset(unit='mA')
-    il2 = NumberAsset(unit='mA')
-    il3 = NumberAsset(unit='mA')
     fnetz = NumberAsset(unit='Hz')
     pv = NumberAsset(unit='W')
     einspeisung = NumberAsset(unit='W')
@@ -167,12 +161,6 @@ class VartaFunction:
                 print("Fehler beim holen der EMS Daten! - %s" % str(e))
 
             if self.ATTConnected:
-                self.device.ul1 = js_wr_data['WR_Data'][5]
-                self.device.ul2 = js_wr_data['WR_Data'][6]
-                self.device.ul3 = js_wr_data['WR_Data'][7]
-                self.device.il1 = (js_wr_data['WR_Data'][8] * 10)
-                self.device.il2 = (js_wr_data['WR_Data'][9] * 10)
-                self.device.il3 = (js_wr_data['WR_Data'][10] * 10)
                 self.device.fnetz = (js_wr_data['WR_Data'][21] / 10)
                 self.device.pv = (js_wr_data['WR_Data'][39])
                 self.device.einspeisung = (js_wr_data['WR_Data'][8] / 100 * js_wr_data['WR_Data'][5]) + \
