@@ -1,139 +1,94 @@
-import urllib.request
 import json
 import time
 import configparser
+import urllib.request
+import urllib.error
+import re
+from prometheus_client import start_http_server, Gauge
 
+def sanitize(name: str) -> str:
+    return re.sub(r'[^0-9a-zA-Z_]', '_', name).lower()
 
-class VartaFunction:
-
-    def __init__(self):
-        self.config = configparser.ConfigParser()
-        # Config lesen
+def parse_js_vars(text: str):
+    # findet Muster wie VarName = { ... };
+    vars = {}
+    for m in re.finditer(r'(\w+)\s*=\s*(\{.*?\})\s*;', text, re.DOTALL):
+        name, js = m.group(1), m.group(2)
         try:
-            self.config.read('config')
-        except:
-            print("Fehler beim öffnen des Configfiles")
-            quit()
+            vars[name] = json.loads(js)
+        except Exception:
+            pass
+    return vars
 
-    def main(self):
-        print("Programmstart MAIN")
-        
-        ems_data_url = 'http://' + self.config['DEFAULT']['VartaHost'] + '/cgi/ems_data.js'
-        ems_conf_url = 'http://' + self.config['DEFAULT']['VartaHost'] + '/cgi/ems_conf.js'
+def build_gauges_from_conf(conf):
+    # erwartet z.B. conf['WR_Conf'] = [ 'Voltage', 'Current', ... ]
+    gauges = {}
+    for key, arr in conf.items():
+        if isinstance(arr, list):
+            for i, name in enumerate(arr):
+                metric_name = sanitize(f"varta_{key}_{name}")
+                gauges[(key, i)] = Gauge(metric_name, f"Varta metric {key}.{name}")
+    return gauges
 
-        js_wr_conf = None
-        js_chrg_conf = None
-        js_batt_conf = None
-        js_modul_conf = None
+def update_gauges(gauges, data):
+    # data z.B. {'WR_Data': [ ... ], 'Charger_Data': [...]}
+    for (key, idx), gauge in list(gauges.items()):
+        arr = data.get(key)
+        if arr is None:
+            continue
+        # bei WR_Data: arr ist Liste einfacher Werte
+        value = arr[idx]
+        gauge.set(float(value))
 
-        js_wr_data = None
-        js_chrg_data = None
+def main():
+    cfg = configparser.ConfigParser()
+    cfg.read('config')
+    host = cfg['DEFAULT'].get('VartaHost', 'localhost')
+    interval = cfg['DEFAULT'].getint('Intervall', 10)
+    prometheus_port = cfg['DEFAULT'].getint('PrometheusPort', 8000)
 
-        # EMS Configuration brauchen wir nur einmal zu holen!
-        count = 1
-        while count < 4:
-            try:
-                print("Hole EMS Konfigurationsdaten - Versuch %s" % count)
-                # Die EMS Config URL enthält Daten:
-                # WR_Conf = Wechselrichter Konfiguration
-                # CHRG_Conf = Lader Konfiguration
-                # BATT_Conf = Batterie Konfiguration
-                # MODUL_Cons = Modul Konfiguration
+    ems_conf_url = f'http://{host}/cgi/ems_conf.js'
+    ems_data_url = f'http://{host}/cgi/ems_data.js'
 
-                # EMS Daten holen
-                ems_conf = urllib.request.urlopen(ems_conf_url).read()
-                ems_conf = ems_conf.decode("utf-8")
-                ems_conf = ems_conf.replace("\n", "")
+    # Prometheus HTTP Server starten
+    start_http_server(prometheus_port)
 
-                # WR Daten aus EMS Daten extrahieren und zu JSON Format anpassen
-                wr_conf = ems_conf[(ems_conf.find("WR_Conf")):]
-                wr_conf = wr_conf[:(wr_conf.find(";"))]
-                wr_conf = '{"' + wr_conf.replace(' = ', '":') + '}'
+    # einmal Konfiguration holen und Gauges anlegen
+    try:
+        raw = urllib.request.urlopen(ems_conf_url, timeout=10).read().decode('utf-8')
+        vars = parse_js_vars(raw)
+        # Beispiel: WR_Conf, Charger_Conf, Batt_Conf, Modul_Conf
+        gauges = {}
+        for name in ('WR_Conf', 'Charger_Conf', 'Batt_Conf', 'Modul_Conf'):
+            if name in vars:
+                # vars[name] ist ein dict mit z.B. 'WR_Conf': [ ... ] oder direkt Liste
+                # normalize: falls wrapper-dict, finden wir Liste im ersten Wert
+                val = vars[name]
+                if isinstance(val, dict):
+                    # nehme ersten Listeneintrag falls vorhanden
+                    for v in val.values():
+                        if isinstance(v, list):
+                            gauges.update(build_gauges_from_conf({name: v}))
+                            break
+                elif isinstance(val, list):
+                    gauges.update(build_gauges_from_conf({name: val}))
+    except Exception as e:
+        print("Fehler beim Holen der Konfig:", e)
+        gauges = {}
 
-                # CHRG Daten aus EMS Daten extrahieren und zu JSON Format anpassen
-                chrg_conf = ems_conf[(ems_conf.find("Charger_Conf")):]
-                chrg_conf = chrg_conf[:(chrg_conf.find(";"))]
-                chrg_conf = '{"' + chrg_conf.replace(' = ', '":') + '}'
-
-                # BATT Daten aus EMS Daten extrahieren und zu JSON Format anpassen
-                batt_conf = ems_conf[(ems_conf.find("Batt_Conf")):]
-                batt_conf = batt_conf[:(batt_conf.find(";"))]
-                batt_conf = '{"' + batt_conf.replace(' = ', '":') + '}'
-
-                # MODUL Daten aus EMS Daten extrahieren und zu JSON Format anpassen
-                modul_conf = ems_conf[(ems_conf.find("Modul_Conf")):]
-                modul_conf = modul_conf[:(modul_conf.find(";"))]
-                modul_conf = '{"' + modul_conf.replace(' = ', '":') + '}'
-
-                # JSON erzeugen
-                js_wr_conf = json.loads(wr_conf)
-                js_chrg_conf = json.loads(chrg_conf)
-                js_batt_conf = json.loads(batt_conf)
-                js_modul_conf = json.loads(modul_conf)
-
-                # geschaft...
-                print("EMS Konfigurationsdaten erfolgreich geholt")
-                break
-            except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
-                print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
-                if count == 3:
-                    print("Fehler beim holen der EMS Konfigurationsdaten - Program Abbruch!")
-                    exit()
-                else:
-                    count += 1
-
-        while True:
-            # hier ziehen wir die Bremse :-)
-            time.sleep(self.config.getint('DEFAULT', 'Intervall'))
-
-            try:
-                ems_data = urllib.request.urlopen(ems_data_url).read()
-                ems_data = ems_data.decode("utf-8")
-                ems_data = ems_data.replace("\n", "")
-
-                wr_data = ems_data[(ems_data.find("WR_Data")):]
-                wr_data = wr_data[:(wr_data.find(";"))]
-                wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
-
-                chrg_data = ems_data[(ems_data.find("Charger_Data")):]
-                chrg_data = chrg_data[:(chrg_data.find(";"))]
-                chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
-
-                # JSON erzeugen
-                js_wr_data = json.loads(wr_data)
-                js_chrg_data = json.loads(chrg_data)
-
-                if self.config.getboolean('DEFAULT', 'Debug') is True:
-                    print("*** EMS/Inverter ***")
-                    for x in range(0, (len(js_wr_data['WR_Data']))):
-                        print("%s = %s" % (js_wr_conf['WR_Conf'][x], js_wr_data['WR_Data'][x]))
-                    print("***Charger***")
-                    for y in range(0, (len(js_chrg_data['Charger_Data']))):
-                        print(">>> CHARGER %s" % y)
-                        for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
-                            if js_chrg_conf['Charger_Conf'][x] == 'BattData':
-                                print(">>> Battery ")
-                                for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
-                                    if js_batt_conf['Batt_Conf'][z] == 'ModulData':
-                                        for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
-                                            print(">>> Battery unit %s" % w)
-                                            for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
-                                                print("%s = %s" % (js_modul_conf['Modul_Conf'][v],
-                                                                   js_chrg_data['Charger_Data'][y][x][z][w][v]))
-                                    else:
-                                        print("%s = %s" % (
-                                            js_batt_conf['Batt_Conf'][z], js_chrg_data['Charger_Data'][y][x][z]))
-                            else:
-                                print("%s = %s" % (js_chrg_conf['Charger_Conf'][x], js_chrg_data['Charger_Data'][y][x]))
-            except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
-                print("Fehler beim holen der EMS Daten! - %s" % str(e))
-
-if __name__ == "__main__":
-    mainprogramm = VartaFunction()
+    # Loop: Daten holen und Gauges aktualisieren
     while True:
         try:
-            mainprogramm.main()
+            raw = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8')
+            vars = parse_js_vars(raw)
+            # vars könnte 'WR_Data' und 'Charger_Data' enthalten
+            # update_gauges erwartet keys wie 'WR_Data' etc.
+            update_gauges(gauges, vars)
+        except urllib.error.URLError as e:
+            print("Netzwerkfehler:", e)
         except Exception as e:
-            print("Exception: %s" % str(e))
-        print("Neustart in 60 Sekunden...")
-        time.sleep(60)
+            print("Fehler beim Verarbeiten:", e)
+        time.sleep(interval)
+
+if __name__ == '__main__':
+    main()
