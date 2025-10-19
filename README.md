@@ -12,12 +12,18 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
 OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-## Use:
-
-Gateway between Varta Storage (Varta Element Series) and AllThingsTalk to log/display parameters and status of Storage Systeme
-
-## ToDo:
+## Prometheus
 
 ```
-First POC
+docker volume create prometheus-data
+docker run -d --restart=always --name prometheus -p 9090:9090 -v prometheus-data:/prometheus prom/prometheus
 ```
+
+## Grafana
+
+```
+docker volume create grafana-data
+docker run -d --restart=always --name=grafana -p 3000:3000 --add-host=host.docker.internal:host-gateway -v grafana-data:/var/lib/grafana grafana/grafana
+```
+
+__URL für Prometheus:__ http://http://host.docker.internal:9090

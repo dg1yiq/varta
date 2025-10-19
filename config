@@ -1,8 +1,4 @@
 [DEFAULT]
 VartaHost = 192.168.3.30
-Debug = False
+Debug = True
 Intervall = 1
-
-[AllThingsTalk]
-DeviceID = qU9hK00q0e6VmJR8svTiFSrQ
-DeviceToken = also:4QbK9cq2dFFzAbKd3cyM2fN1LIF7mhlbOhTzMalz

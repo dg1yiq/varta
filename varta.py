@@ -2,23 +2,12 @@ import urllib.request
 import json
 import time
 import configparser
-from allthingstalk import Client, Device, IntegerAsset, NumberAsset
-
-
-# Definieren des ATT Devices mit Assets
-class Varta(Device):
-    fnetz = NumberAsset(unit='Hz')
-    pv = NumberAsset(unit='W')
-    einspeisung = NumberAsset(unit='W')
 
 
 class VartaFunction:
 
     def __init__(self):
-        self.ATTConnected = False
         self.config = configparser.ConfigParser()
-        self.device = None
-        self.client = None
         # Config lesen
         try:
             self.config.read('config')
@@ -28,27 +17,6 @@ class VartaFunction:
 
     def main(self):
         print("Programmstart MAIN")
-        # ATT Verbindung initialisieren
-        devicetoken = self.config.get('AllThingsTalk', 'DeviceToken', fallback=None)
-        deviceid = self.config.get('AllThingsTalk', 'DeviceID', fallback=None)
-
-        if "also" in devicetoken:
-            api = "also.allthingstalk.io"
-        elif "maker" in devicetoken:
-            api = "api.allthingstalk.io"
-        else:
-            api = None
-        if (devicetoken is None) or (len(devicetoken) < 40) or (api is None):
-            print("ATT DeviceToken falsch konfiguriert?!")
-        if (deviceid is None) or (len(deviceid) != 24):
-            print("ATT DeviceID falsch konfiguriert?!")
-        try:
-            self.client = Client(devicetoken, api=api)
-            self.device = Varta(client=self.client, id=deviceid)
-            self.ATTConnected = True
-        except Exception as e:
-            print("Fehler beim Aufbau der ATT Verbindung - %s" % e)
-            self.ATTConnected = False
         
         ems_data_url = 'http://' + self.config['DEFAULT']['VartaHost'] + '/cgi/ems_data.js'
         ems_conf_url = 'http://' + self.config['DEFAULT']['VartaHost'] + '/cgi/ems_conf.js'
@@ -160,24 +128,12 @@ class VartaFunction:
             except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
                 print("Fehler beim holen der EMS Daten! - %s" % str(e))
 
-            if self.ATTConnected:
-                self.device.fnetz = (js_wr_data['WR_Data'][21] / 10)
-                self.device.pv = (js_wr_data['WR_Data'][39])
-                self.device.einspeisung = (js_wr_data['WR_Data'][8] / 100 * js_wr_data['WR_Data'][5]) + \
-                                          (js_wr_data['WR_Data'][9] / 100 * js_wr_data['WR_Data'][6]) + \
-                                          (js_wr_data['WR_Data'][10] / 100 * js_wr_data['WR_Data'][7])
-
-
 if __name__ == "__main__":
     mainprogramm = VartaFunction()
     while True:
         try:
             mainprogramm.main()
-        except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
-            print("Allgemeiner Fehler, vermutlich ATT! - %s" % str(e))
-        print("Cleanup...")
-        mainprogramm.ATTConnected = False
-        mainprogramm.device = None
-        mainprogramm.client = None
+        except Exception as e:
+            print("Exception: %s" % str(e))
         print("Neustart in 60 Sekunden...")
         time.sleep(60)
