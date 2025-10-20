@@ -3,87 +3,113 @@ import time
 import configparser
 import urllib.request
 import urllib.error
-import re
+from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
 
-def create_gauges_from_final(final, sanitize):
+# Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
+def append_final_to_structure(structure: Dict[str, List[Dict[str, List[Any]]]],
+                              parsed: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, List[Any]]]]:
     """
-    Erzeugt:
-    - inverter_gauges: dict mapping inverter_key -> Gauge
-    - charger_gauge: ein Gauge mit Labels (charger,battery,module,metric) für alle Charger-Werte
+    Fügt die Werte aus `parsed` (deinem `final`-Dict) zyklisch an `structure` an.
+    Wenn structure leer ist, wird sie initialisiert und zurückgegeben.
     """
-    inverter_gauges = {}
-    for item in final.get('Inverter', []):
-        for k in item.keys():
-            metric_name = sanitize(f"varta_inverter_{k}")
-            # Nur einmal anlegen
-            if k not in inverter_gauges:
-                inverter_gauges[k] = Gauge(metric_name, f"Varta Inverter {k}")
-    charger_gauge = Gauge('varta_charger_value', 'Varta charger metric', ['charger', 'battery', 'module', 'metric'])
-    return inverter_gauges, charger_gauge
+    if structure is None:
+        return create_structure_from_final(parsed)
 
-def update_gauges_from_final(inverter_gauges, charger_gauge, final, sanitize):
-    """
-    Aktualisiert die Gauges mit Werten aus `final`.
-    Nicht-konvertierbare Werte (Strings, IPs, Namen) werden übersprungen.
-    """
-    # Inverter aktualisieren
-    for item in final.get('Inverter', []):
-        for k, v in item.items():
-            g = inverter_gauges.get(k)
-            if g is None:
-                continue
-            try:
-                g.set(float(v))
-            except (TypeError, ValueError):
-                # nicht-numerisch -> skip
-                continue
+    for metric, entries in parsed.items():
+        for e in entries:
+            for type_name, val in e.items():
+                update_metric(structure, metric, type_name, val)
+    return structure
 
-    # Charger aktualisieren
-    for c_idx, charger in enumerate(final.get('Charger', [])):
-        # charger ist eine Liste von Einträgen; einige sind {'Batteries': [...]}, andere einfache key->value
-        for entry in charger:
-            for key, val in entry.items():
-                if key == 'Batteries' and isinstance(val, list):
-                    # val ist Liste von Batteries (jede Battery ist Liste von dicts)
-                    for b_idx, battery in enumerate(val):
-                        # battery ist Liste von dicts
-                        for b_item in battery:
-                            for b_key, b_val in b_item.items():
-                                if b_key == 'ModulData' and isinstance(b_val, list):
-                                    # b_val ist Liste von Modul-Listen
-                                    for module_list in b_val:
-                                        for m_idx, module in enumerate(module_list):
-                                            # module ist Liste von dicts (jedes dict ein Metric)
-                                            for m_item in module:
-                                                for m_key, m_val in m_item.items():
-                                                    try:
-                                                        f = float(m_val)
-                                                    except (TypeError, ValueError):
-                                                        continue
-                                                    charger_gauge.labels(charger=str(c_idx),
-                                                                         battery=str(b_idx),
-                                                                         module=str(m_idx),
-                                                                         metric=sanitize(m_key)).set(f)
-                                else:
-                                    try:
-                                        f = float(b_val)
-                                    except (TypeError, ValueError):
-                                        continue
-                                    charger_gauge.labels(charger=str(c_idx),
-                                                         battery=str(b_idx),
-                                                         module='',
-                                                         metric=sanitize(b_key)).set(f)
+def create_gauges_from_structure(structure: Dict[str, List[Dict[str, List[Any]]]]
+                                ) -> tuple[Gauge, Dict[str, Dict[str, Any]]]:
+    """
+    Erzeugt einen einzigen Gauge mit Labels 'metric' und 'type' und
+    legt für jede Metric/Type-Kombination das Child (labels(...)) an.
+    Rückgabe: (base_gauge, children_map[metric][type] -> child)
+    """
+    g = Gauge('varta_metric', 'Varta metric values', ['metric', 'type'])
+    children: Dict[str, Dict[str, Any]] = {}
+    for metric, entries in structure.items():
+        children[metric] = {}
+        for entry in entries:
+            for type_name in entry.keys():
+                try:
+                    children[metric][type_name] = g.labels(metric=metric, type=type_name)
+                except Exception:
+                    children[metric][type_name] = None
+    return g, children
+
+def write_gauges_from_children(children: Dict[str, Dict[str, Any]],
+                               structure: Dict[str, List[Dict[str, List[Any]]]]) -> None:
+    """
+    Schreibt die letzten Werte aus structure in die vorab angelegten Children.
+    """
+    for metric, entries in structure.items():
+        for entry in entries:
+            for type_name, values in entry.items():
+                if not values:
+                    continue
+                val = values[-1]
+                if isinstance(val, bool):
+                    num = 1.0 if val else 0.0
                 else:
-                    # einfacher Charger-Level Eintrag
                     try:
-                        f = float(val)
+                        num = float(val)
                     except (TypeError, ValueError):
                         continue
-                    charger_gauge.labels(charger=str(c_idx),
-                                         battery='',
-                                         module='',
-                                         metric=sanitize(key)).set(f)
+                child = children.get(metric, {}).get(type_name)
+                if child is not None:
+                    try:
+                        child.set(num)
+                    except Exception:
+                        pass
+
+def _find_type_entry(metric_list: List[Dict[str, List[Any]]], type_name: str):
+    for entry in metric_list:
+        if type_name in entry:
+            return entry
+    return None
+
+def update_metric(structure: Dict[str, List[Dict[str, List[Any]]]],
+                  metric: str,
+                  type_name: str,
+                  value: Any) -> None:
+    """
+    Fügt `value` zu structure[metric][type_name] hinzu.
+    Legt Metric und Type an, falls nicht vorhanden.
+    Wenn `value` eine Liste ist, werden die Elemente angehängt.
+    """
+    if metric not in structure:
+        structure[metric] = []
+    metric_list = structure[metric]
+
+    entry = _find_type_entry(metric_list, type_name)
+    if entry is None:
+        entry = {type_name: []}
+        metric_list.append(entry)
+
+    if isinstance(value, list):
+        entry[type_name].extend(value)
+    else:
+        entry[type_name].append(value)
+
+def create_structure_from_final(parsed: Dict[str, List[Dict[str, Any]]]) -> Dict[str, List[Dict[str, List[Any]]]]:
+    """
+    Erzeugt die gewünschte Struktur aus dem bereits erzeugten `final`-Dict.
+    Beispiel input:
+      { "Inverter": [{"EMS PExtra": 0}, {"EMS UG": -4000}], ... }
+    Ergebnis:
+      { "Inverter": [{"EMS PExtra": [0]}, {"EMS UG": [-4000]}], ... }
+    Falls derselbe Type mehrfach vorkommt, werden die Werte in einer Liste zusammengeführt.
+    """
+    structure: Dict[str, List[Dict[str, List[Any]]]] = {}
+    for metric, entries in parsed.items():
+        for e in entries:
+            for type_name, val in e.items():
+                update_metric(structure, metric, type_name, val)
+    return structure
 
 def main():
     cfg = configparser.ConfigParser()
@@ -106,7 +132,9 @@ def main():
     # Prometheus HTTP Server starten
     start_http_server(prometheus_port)
 
-    runcreatgauges = True
+    struct = None
+    gauge = None
+    gauge_children = None
 
     # einmal Konfiguration holen und Gauges anlegen
     try:
@@ -143,68 +171,76 @@ def main():
         print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
 
     while True:
-         # EMS Daten holen
+        ems_data = ''
         try:
             ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+        except Exception as e:
+            print("X", end='', flush=True)
 
-            wr_data = ems_data[(ems_data.find("WR_Data")):]
-            wr_data = wr_data[:(wr_data.find(";"))]
-            wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
+        if ems_data == '':
+            time.sleep(interval)
+            continue
 
-            chrg_data = ems_data[(ems_data.find("Charger_Data")):]
-            chrg_data = chrg_data[:(chrg_data.find(";"))]
-            chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
+        wr_data = ems_data[(ems_data.find("WR_Data")):]
+        wr_data = wr_data[:(wr_data.find(";"))]
+        wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
 
-            # JSON erzeugen
-            js_wr_data = json.loads(wr_data)
-            js_chrg_data = json.loads(chrg_data)
+        chrg_data = ems_data[(ems_data.find("Charger_Data")):]
+        chrg_data = chrg_data[:(chrg_data.find(";"))]
+        chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
 
-            final = {}
+        # JSON erzeugen
+        js_wr_data = json.loads(wr_data)
+        js_chrg_data = json.loads(chrg_data)
 
-            # add WR_Data to final
-            final['Inverter'] = []
-            for x in range(0, (len(js_wr_data['WR_Data']))):
-                # Append Key data to final
-                final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
+        final = {}
 
+        # add WR_Data to final
+        final['Inverter'] = []
+        for x in range(0, (len(js_wr_data['WR_Data']))):
+            # Append Key data to final
+            final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
+
+        for y in range(0, (len(js_chrg_data['Charger_Data']))):
+            # For every Charger add an Arry to charger
             charger = []
-            for y in range(0, (len(js_chrg_data['Charger_Data']))):
-                # For every Charger add an Arry to charger
-                charger.append([])
-                # Check for Chield Elements
+            # Check for Chield Elements
+            for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
                 battery = []
-                for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
-                    if js_chrg_conf['Charger_Conf'][x] == 'BattData':
-                        module = []
-                        for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
-                            if js_batt_conf['Batt_Conf'][z] == 'ModulData':
-                                module.append([])
-                                for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
-                                    for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
-                                        # Module Data
-                                        module[w].append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
-                                battery.append({'ModulData': module})
-                            else:
-                                battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
-                        # Append Battery Data
-                        charger[y].append({'Batteries': battery})
-                    else:
-                        # Append Inverter Data
-                        charger[y].append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
+                battcount = 0
+                if js_chrg_conf['Charger_Conf'][x] == 'BattData':
+                    for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
+                        if js_batt_conf['Batt_Conf'][z] == 'ModulData':
+                            for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
+                                module = []
+                                modulecount = 0
+                                for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
+                                    # Module Data
+                                    module.append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
+                                final[f'Charger{y}_Battery{battcount}_Module{modulecount}'] = module
+                                modulecount += 1
+                        else:
+                            battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
+                    # Append Battery Data
+                    final[f'Charger{y}_Battery{battcount}'] = battery
+                    battcount += 1
+                else:
+                    # Append Inverter Data
+                    charger.append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
+            final[f'Charger{y}'] = charger
 
-            final['Charger'] = charger
+        print(".", end='', flush=True)
 
-            # Check if Run Create Gauges
-            if runcreatgauges:
-                inverter_gauges, charger_gauge = create_gauges_from_final(final, lambda s: re.sub(r'[^a-zA-Z0-9_]', '_', s.lower()))
-                runcreatgauges = False
-
-            # Update Gauges
-            if 'inverter_gauges' not in locals() or 'charger_gauge' not in locals():
-                inverter_gauges, charger_gauge = create_gauges_from_final(final, lambda s: re.sub(r'[^a-zA-Z0-9_]', '_', s.lower()))
-
-        except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
-            print("Fehler beim holen der EMS Daten! - %s" % str(e))
+        if struct is None:
+            # Erster Zyklus: Struktur aus final erzeugen und Gauges anlegen
+            struct = create_structure_from_final(final)
+            gauge, gauge_children = create_gauges_from_structure(struct)
+            # Optional sofort Gauges initial füllen
+            write_gauges_from_children(gauge_children, struct)
+        else:
+            # Folgende Zyklen: neue Werte an bestehende Struktur anhängen und Gauges aktualisieren
+            append_final_to_structure(struct, final)
+            write_gauges_from_children(gauge_children, struct)
 
         # Warte Intervall
         time.sleep(interval)
