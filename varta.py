@@ -176,8 +176,11 @@ def main():
             ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
         except Exception as e:
             print("X", end='', flush=True)
+            time.sleep(interval)
+            continue
 
-        if ems_data == '':
+        # Check that ems_data containce the required data
+        if ems_data.find("WR_Data") == -1 or ems_data.find("Charger_Data") == -1 or ems_data == '':
             time.sleep(interval)
             continue
 
@@ -197,18 +200,29 @@ def main():
 
         # add WR_Data to final
         final['Inverter'] = []
+        # Check if it is a list
+        if not isinstance(js_wr_data['WR_Data'], list):
+            time.sleep(interval)
+            continue
+
         for x in range(0, (len(js_wr_data['WR_Data']))):
             # Append Key data to final
             final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
 
+        # Check that Charger_Data is a list
+        if not isinstance(js_chrg_data['Charger_Data'], list):
+            time.sleep(interval)
+            continue
+
         for y in range(0, (len(js_chrg_data['Charger_Data']))):
             # For every Charger add an Arry to charger
             charger = []
-            # Check for Chield Elements
+            # 
             for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
                 battery = []
                 battcount = 0
                 if js_chrg_conf['Charger_Conf'][x] == 'BattData':
+                    # Check for Battery Elements
                     for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
                         if js_batt_conf['Batt_Conf'][z] == 'ModulData':
                             for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):

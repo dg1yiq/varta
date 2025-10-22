@@ -84,4 +84,15 @@ docker volume create grafana-data
 docker run -d --restart=always --name=grafana -p 3000:3000 --add-host=host.docker.internal:host-gateway -v grafana-data:/var/lib/grafana grafana/grafana
 ```
 
-__URL für Prometheus:__ http://http://host.docker.internal:9090
+__URL für Prometheus:__ http://host.docker.internal:9090
+
+
+## Error:
+
+Traceback (most recent call last):
+  File "/home/marco/varta/varta.py", line 249, in <module>
+    main()
+  File "/home/marco/varta/varta.py", line 214, in main
+    for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
+TypeError: object of type 'int' has no len()
+
