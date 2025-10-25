@@ -20,12 +20,17 @@ This is a simple Programm to connect Varte Storage to Prometheus and Grafana.
 
 __Attention:__ You need to adjust the `prometheus.yml` configuration file in the `./prometheus` folder to point to the Varta Storage Exporter!
 
+prometheus.yml (Section to add/check/modify):
 ```
+...
+  
   static_configs:
   - targets:
     - host.docker.internal:8000
     labels:
       app: varta
+  
+...
 ```
 
 Docker Run Command:
