@@ -2,7 +2,7 @@ FROM python:3.11.9-bookworm
 
 WORKDIR /usr/src/varta
 
-RUN pip install --no-cache-dir prometheus-client == 0.23.1;
+RUN pip install --no-cache-dir prometheus-client==0.23.1;
 
 COPY ./varta.py ./
 
