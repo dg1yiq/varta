@@ -12,58 +12,11 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE
 OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 
-## Prometheus
+## What is this?
 
-```
-global:
-  scrape_interval: 15s
-  scrape_timeout: 10s
-  scrape_protocols:
-  - OpenMetricsText1.0.0
-  - OpenMetricsText0.0.1
-  - PrometheusText1.0.0
-  - PrometheusText0.0.4
-  evaluation_interval: 15s
-  metric_name_validation_scheme: utf8
-runtime:
-  gogc: 75
-alerting:
-  alertmanagers:
-  - follow_redirects: true
-    enable_http2: true
-    scheme: http
-    timeout: 10s
-    api_version: v2
-    static_configs:
-    - targets: []
-scrape_configs:
-- job_name: varta
-  honor_timestamps: true
-  track_timestamps_staleness: false
-  scrape_interval: 15s
-  scrape_timeout: 10s
-  scrape_protocols:
-  - OpenMetricsText1.0.0
-  - OpenMetricsText0.0.1
-  - PrometheusText1.0.0
-  - PrometheusText0.0.4
-  always_scrape_classic_histograms: false
-  convert_classic_histograms_to_nhcb: false
-  metrics_path: /metrics
-  scheme: http
-  enable_compression: true
-  metric_name_validation_scheme: utf8
-  metric_name_escaping_scheme: allow-utf-8
-  follow_redirects: true
-  enable_http2: true
-  static_configs:
-  - targets:
-    - host.docker.internal:8000
-    labels:
-      app: varta
-otlp:
-  translation_strategy: UnderscoreEscapingWithSuffixes
-```
+This is a simple Programm to connect Varte Storage to Prometheus and Grafana.
+
+## Prometheus
 
 ```
 docker volume create prometheus-data
@@ -81,18 +34,14 @@ docker run -d \
 
 ```
 docker volume create grafana-data
-docker run -d --restart=always --name=grafana -p 3000:3000 --add-host=host.docker.internal:host-gateway -v grafana-data:/var/lib/grafana grafana/grafana
+docker run -d \
+           --restart=always \
+           --name=grafana \
+           -p 3000:3000 \
+           --add-host=host.docker.internal:host-gateway \
+           -v grafana-data:/var/lib/grafana \
+           grafana/grafana
 ```
 
-__URL für Prometheus:__ http://host.docker.internal:9090
-
-
-## Error:
-
-Traceback (most recent call last):
-  File "/home/marco/varta/varta.py", line 249, in <module>
-    main()
-  File "/home/marco/varta/varta.py", line 214, in main
-    for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
-TypeError: object of type 'int' has no len()
+__URL für Prometheus Database:__ http://host.docker.internal:9090
 
