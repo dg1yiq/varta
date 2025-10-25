@@ -1,4 +1,0 @@
-[DEFAULT]
-VartaHost = 192.168.3.30
-Debug = True
-Intervall = 15

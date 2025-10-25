@@ -1,9 +1,9 @@
 import json
 import time
-import configparser
 import urllib.request
 import urllib.error
-from typing import Dict, List, Any
+import argparse
+from typing import Dict, List, Any, Tuple
 from prometheus_client import start_http_server, Gauge
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
@@ -111,12 +111,11 @@ def create_structure_from_final(parsed: Dict[str, List[Dict[str, Any]]]) -> Dict
                 update_metric(structure, metric, type_name, val)
     return structure
 
-def main():
-    cfg = configparser.ConfigParser()
-    cfg.read('config')
-    host = cfg['DEFAULT'].get('VartaHost', 'localhost')
-    interval = cfg['DEFAULT'].getint('Intervall', 10)
-    prometheus_port = cfg['DEFAULT'].getint('PrometheusPort', 8000)
+def main(host: str, prometheus_port: int, interval: int):
+    if not host:
+        raise SystemExit('Fehler: Das Argument `host` ist zwingend erforderlich.')
+
+    print(f'Starte Varta Exporter für Speicher: {host} auf Prometheus Port {prometheus_port} mit Intervall {interval} Sekunden.')
 
     ems_conf_url = f'http://{host}/cgi/ems_conf.js'
     ems_data_url = f'http://{host}/cgi/ems_data.js'
@@ -167,7 +166,7 @@ def main():
         js_batt_conf = json.loads(batt_conf)
         js_modul_conf = json.loads(modul_conf)
 
-    except (ConnectionError, ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError) as e:
+    except Exception as e:
         print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
 
     while True:
@@ -259,5 +258,13 @@ def main():
         # Warte Intervall
         time.sleep(interval)
 
+
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser(description='Varta Exporter')
+    parser.add_argument('host', help='IP-Adresse oder Hostname des Varta Speichers (z.B. 192.168.3.30)')
+    parser.add_argument('--prometheus-port', '-p', type=int, default=8000,
+                        help='Prometheus HTTP Port (Default 8000)')
+    parser.add_argument('--interval', '-i', type=int, default=15,
+                        help='Abfrageintervall in Sekunden (Default 15)')
+    args = parser.parse_args()
+    main(args.host, args.prometheus_port, args.interval)

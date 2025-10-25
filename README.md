@@ -18,6 +18,18 @@ This is a simple Programm to connect Varte Storage to Prometheus and Grafana.
 
 ## Prometheus
 
+__Attention:__ You need to adjust the `prometheus.yml` configuration file in the `./prometheus` folder to point to the Varta Storage Exporter!
+
+```
+  static_configs:
+  - targets:
+    - host.docker.internal:8000
+    labels:
+      app: varta
+```
+
+Docker Run Command:
+
 ```
 docker volume create prometheus-data
 docker run -d \
@@ -45,3 +57,61 @@ docker run -d \
 
 __URL für Prometheus Database:__ http://host.docker.internal:9090
 
+## Varta Storage Exporter
+
+```
+docker build -t varta-exporter .
+docker run -d \
+           --restart=always \
+           --name=varta-exporter \
+           -p 8000:8000 \
+           --add-host=host.docker.internal:host-gateway \
+           varta-exporter 192.168.3.30
+```
+
+## Alternativ Docker Compose:
+
+```
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus:/etc/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  varta-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: varta-exporter:latest
+    container_name: varta-exporter
+    restart: always
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["192.168.3.30"]
+
+volumes:
+  prometheus-data:
+  grafana-data:
+```
