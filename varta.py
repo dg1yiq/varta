@@ -115,7 +115,7 @@ def main(host: str, prometheus_port: int, interval: int):
     if not host:
         raise SystemExit('Fehler: Das Argument `host` ist zwingend erforderlich.')
 
-    print(f'Starte Varta Exporter für Speicher: {host} auf Prometheus Port {prometheus_port} mit Intervall {interval} Sekunden.')
+    print(f'\nStarte Varta Exporter für Speicher: {host} auf Prometheus Port {prometheus_port} mit Intervall {interval} Sekunden.')
 
     ems_conf_url = f'http://{host}/cgi/ems_conf.js'
     ems_data_url = f'http://{host}/cgi/ems_data.js'
@@ -178,71 +178,77 @@ def main(host: str, prometheus_port: int, interval: int):
             time.sleep(interval)
             continue
 
-        # Check that ems_data containce the required data
-        if ems_data.find("WR_Data") == -1 or ems_data.find("Charger_Data") == -1 or ems_data == '':
+        try:
+            # Check that ems_data containce the required data
+            if ems_data.find("WR_Data") == -1 or ems_data.find("Charger_Data") == -1 or ems_data == '':
+                time.sleep(interval)
+                continue
+
+            wr_data = ems_data[(ems_data.find("WR_Data")):]
+            wr_data = wr_data[:(wr_data.find(";"))]
+            wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
+
+            chrg_data = ems_data[(ems_data.find("Charger_Data")):]
+            chrg_data = chrg_data[:(chrg_data.find(";"))]
+            chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
+
+            # JSON erzeugen
+            js_wr_data = json.loads(wr_data)
+            js_chrg_data = json.loads(chrg_data)
+
+            final = {}
+
+            # add WR_Data to final
+            final['Inverter'] = []
+            # Check if it is a list
+            if not isinstance(js_wr_data['WR_Data'], list):
+                time.sleep(interval)
+                continue
+
+            for x in range(0, (len(js_wr_data['WR_Data']))):
+                # Append Key data to final
+                final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
+
+            # Check that Charger_Data is a list
+            if not isinstance(js_chrg_data['Charger_Data'], list):
+                time.sleep(interval)
+                continue
+
+            for y in range(0, (len(js_chrg_data['Charger_Data']))):
+                # For every Charger add an Arry to charger
+                charger = []
+                #
+                for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
+                    battery = []
+                    battcount = 0
+                    if js_chrg_conf['Charger_Conf'][x] == 'BattData':
+                        # Check for Battery Elements
+                        for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
+                            if js_batt_conf['Batt_Conf'][z] == 'ModulData':
+                                for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
+                                    module = []
+                                    modulecount = 0
+                                    for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
+                                        # Module Data
+                                        module.append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
+                                    final[f'Charger{y}_Battery{battcount}_Module{modulecount}'] = module
+                                    modulecount += 1
+                            else:
+                                battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
+                        # Append Battery Data
+                        final[f'Charger{y}_Battery{battcount}'] = battery
+                        battcount += 1
+                    else:
+                        # Append Inverter Data
+                        charger.append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
+                final[f'Charger{y}'] = charger
+
+            print(".", end='', flush=True)
+
+        except Exception as e:
+            print("E", end='', flush=True)
             time.sleep(interval)
             continue
-
-        wr_data = ems_data[(ems_data.find("WR_Data")):]
-        wr_data = wr_data[:(wr_data.find(";"))]
-        wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
-
-        chrg_data = ems_data[(ems_data.find("Charger_Data")):]
-        chrg_data = chrg_data[:(chrg_data.find(";"))]
-        chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
-
-        # JSON erzeugen
-        js_wr_data = json.loads(wr_data)
-        js_chrg_data = json.loads(chrg_data)
-
-        final = {}
-
-        # add WR_Data to final
-        final['Inverter'] = []
-        # Check if it is a list
-        if not isinstance(js_wr_data['WR_Data'], list):
-            time.sleep(interval)
-            continue
-
-        for x in range(0, (len(js_wr_data['WR_Data']))):
-            # Append Key data to final
-            final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
-
-        # Check that Charger_Data is a list
-        if not isinstance(js_chrg_data['Charger_Data'], list):
-            time.sleep(interval)
-            continue
-
-        for y in range(0, (len(js_chrg_data['Charger_Data']))):
-            # For every Charger add an Arry to charger
-            charger = []
-            # 
-            for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
-                battery = []
-                battcount = 0
-                if js_chrg_conf['Charger_Conf'][x] == 'BattData':
-                    # Check for Battery Elements
-                    for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
-                        if js_batt_conf['Batt_Conf'][z] == 'ModulData':
-                            for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
-                                module = []
-                                modulecount = 0
-                                for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
-                                    # Module Data
-                                    module.append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
-                                final[f'Charger{y}_Battery{battcount}_Module{modulecount}'] = module
-                                modulecount += 1
-                        else:
-                            battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
-                    # Append Battery Data
-                    final[f'Charger{y}_Battery{battcount}'] = battery
-                    battcount += 1
-                else:
-                    # Append Inverter Data
-                    charger.append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
-            final[f'Charger{y}'] = charger
-
-        print(".", end='', flush=True)
 
         if struct is None:
             # Erster Zyklus: Struktur aus final erzeugen und Gauges anlegen
