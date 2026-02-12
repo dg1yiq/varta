@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      # 3 Jahre Retention:
+      - "--storage.tsdb.retention.time=1095d"
+      # Optional: zusätzliches Größenlimit (verhindert volle Disk)
+      # - "--storage.tsdb.retention.size=100GB"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus:/etc/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  varta-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: varta-exporter:latest
+    container_name: varta-exporter
+    restart: always
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["192.168.3.30"]
+
+volumes:
+  prometheus-data:
+    name: prometheus-data
+  grafana-data:
+    name: grafana-data
