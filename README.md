@@ -20,61 +20,9 @@ This is a simple Programm to connect Varte Storage to Prometheus and Grafana.
 
 __Attention:__ You need to adjust the `prometheus.yml` configuration file in the `./prometheus` folder to point to the Varta Storage Exporter!
 
-prometheus.yml (Section to add/check/modify):
-```
-...
-  
-  static_configs:
-  - targets:
-    - host.docker.internal:8000
-    labels:
-      app: varta
-  
-...
-```
-
-Docker Run Command:
-
-```
-docker volume create prometheus-data
-docker run -d \
-           --restart=always \
-           --name prometheus \
-           -p 9090:9090 \
-           --add-host=host.docker.internal:host-gateway \
-           -v prometheus-data:/prometheus \
-           -v ./prometheus:/etc/prometheus \
-           prom/prometheus
-```
-
-## Grafana
-
-```
-docker volume create grafana-data
-docker run -d \
-           --restart=always \
-           --name=grafana \
-           -p 3000:3000 \
-           --add-host=host.docker.internal:host-gateway \
-           -v grafana-data:/var/lib/grafana \
-           grafana/grafana
-```
-
 __URL für Prometheus Database:__ http://host.docker.internal:9090
 
-## Varta Storage Exporter
-
-```
-docker build -t varta-exporter .
-docker run -d \
-           --restart=always \
-           --name=varta-exporter \
-           -p 8000:8000 \
-           --add-host=host.docker.internal:host-gateway \
-           varta-exporter 192.168.3.30
-```
-
-## Alternativ Docker Compose:
+## Docker Compose File docker-compose.yml
 
 ```
 version: "3.8"
@@ -88,6 +36,13 @@ services:
       - "9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      # 3 Jahre Retention:
+      - "--storage.tsdb.retention.time=1095d"
+      # Optional: zusätzliches Größenlimit (verhindert volle Disk)
+      # - "--storage.tsdb.retention.size=100GB"
     volumes:
       - prometheus-data:/prometheus
       - ./prometheus:/etc/prometheus
@@ -116,7 +71,11 @@ services:
       - "host.docker.internal:host-gateway"
     command: ["192.168.3.30"]
 
-volumes:
+olumes:
   prometheus-data:
+    name: prometheus-data
   grafana-data:
+    name: grafana-data
 ```
+
+Starten mit `docker-compose up -d`
