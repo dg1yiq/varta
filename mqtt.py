@@ -101,7 +101,7 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
 
     value = next((e['EWr_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_DC_AC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="elelemt", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
 
     u1 = next((e['U Verbund L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L1' in e), None)
     u2 = next((e['U Verbund L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L2' in e), None)
@@ -152,7 +152,12 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
                 "unique_id": f"{deviceid}_{sensorid}",
                 "unit_of_measurement": unit,
                 "device_class": device_class,
-                "state_class": state_class
+                "state_class": state_class,
+                "device": {
+                    "identifiers": [deviceid],
+                    "name": "Varta Element",
+                    "manufacturer": "Varta"
+                }
             }
             return json.dumps(payload)
         else:
@@ -188,5 +193,5 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
 
     # Battery Power = Positiv: Entladung, Negativ: Ladung
     sensorid = "battery_power"
-    payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Batterieladung", unit="W", device_class="power", state_class="measurement")
+    payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Batterieentladung", unit="W", device_class="power", state_class="measurement")
     mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
