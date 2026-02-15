@@ -141,6 +141,13 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         p_total = (p1 + p2 + p3) * -1
         mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
 
+    soc1 = next((e['SOC_GS'] for e in werte.get('Charger0', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
+    soc2 = next((e['SOC_GS'] for e in werte.get('Charger1', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
+    soc = None
+    if soc1 is not None and soc2 is not None:
+        soc = (soc1 + soc2) / 2
+        mqttclient.upstreamstate(deviceid="element", sensorid="state_of_charge", state=str(soc), retain=False)
+
 
 def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     def dicoverypayload(deviceid: str = None, sensorid: str = None, name: str = None, unit: str = None,
@@ -195,3 +202,9 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     sensorid = "battery_power"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Batterieentladung", unit="W", device_class="power", state_class="measurement")
     mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
+
+    # State of Charge in Prozent
+    sensorid = "state_of_charge"
+    payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Ladezustand", unit="%", device_class="battery", state_class="measurement")
+    mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
+    
