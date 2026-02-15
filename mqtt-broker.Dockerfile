@@ -7,7 +7,7 @@ RUN set -ex; \
       ca-certificates \
       wget \
       unzip \
-      mosquitto \
+      mosquitto; \
       apt-get -y --purge autoremove; \
       apt-get clean; \
       rm -rf /var/lib/apt/lists/*;
