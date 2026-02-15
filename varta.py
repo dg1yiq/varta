@@ -5,6 +5,8 @@ import urllib.error
 import argparse
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
+from mqtt import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
+
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
 def append_final_to_structure(structure: Dict[str, List[Dict[str, List[Any]]]],
@@ -111,11 +113,26 @@ def create_structure_from_final(parsed: Dict[str, List[Dict[str, Any]]]) -> Dict
                 update_metric(structure, metric, type_name, val)
     return structure
 
-def main(host: str, prometheus_port: int, interval: int):
+def main(host: str,
+         prometheus_port: int,
+         interval: int,
+         mqtt: bool = False,
+         mqtt_host: str = None,
+         mqtt_port: int = 1883,
+         mqtt_username: str = None,
+         mqtt_password: str = None):
     if not host:
         raise SystemExit('Fehler: Das Argument `host` ist zwingend erforderlich.')
 
     print(f'\nStarte Varta Exporter für Speicher: {host} auf Prometheus Port {prometheus_port} mit Intervall {interval} Sekunden.')
+
+    mqtt_client = None
+
+    if mqtt is True:
+        print(f'Main: MQTT Exporter aktiviert')
+        mqtt_client = MQTTClient(hostname=mqtt_host, port=mqtt_port, username=mqtt_username, password=mqtt_password)
+        mqtt_client.client.loop_start()
+        generate_mqtt_discovery(mqtt_client)
 
     ems_conf_url = f'http://{host}/cgi/ems_conf.js'
     ems_data_url = f'http://{host}/cgi/ems_data.js'
@@ -175,19 +192,22 @@ def main(host: str, prometheus_port: int, interval: int):
     energy_nextrun = time.time() + 60  # Energie-Daten alle 60 Sekunden holen, da sie sich nicht so schnell ändern
 
     while True:
+        # Warte bis zum nächsten Zyklustakt
         if time.time() < nextrun:
-            time.sleep(1)
+            time.sleep(0.1)
             continue
 
+        # Rearm nextrun immediately to avoid drift, auch wenn die Datenabfrage länger dauert als das Intervall
         nextrun = time.time() + interval
 
+        # EMS Daten holen, da sie sich schnell ändern können, aber nur einmal pro Zyklus
         ems_data = ''
         try:
             ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
         except Exception as e:
             print("A", end='', flush=True)
 
-
+        # Energie-Daten holen, aber nur alle 60 Sekunden, da sie sich nicht so schnell ändern
         energy_data = ''
         if time.time() >= energy_nextrun:
             energy_nextrun = time.time() + 60
@@ -202,9 +222,9 @@ def main(host: str, prometheus_port: int, interval: int):
                     print("B", end='', flush=True)
                     time.sleep(1)
 
+        # Finale Datenstruktur für diesen Zyklus, die aus den rohen Daten geparst wird und die wir an die Struktur anhängen
         final = {}
 
-        # Decodieren der Daten und Anlegen der finalen Struktur für die Gauges
         if ems_data != '':
             try:
                 # Check that ems_data containce the required data
@@ -274,8 +294,6 @@ def main(host: str, prometheus_port: int, interval: int):
                 print("E", end='', flush=True)
                 time.sleep(interval)
                 continue
-
-        # Extract energy data and add it to final
 
         if energy_data != '':
             try:
@@ -360,16 +378,20 @@ def main(host: str, prometheus_port: int, interval: int):
             append_final_to_structure(struct, final)
             write_gauges_from_children(gauge_children, struct)
 
-        # Warte Intervall
-        time.sleep(interval)
-
+        if mqtt is True:
+            generate_mqtt_uplink(final, mqtt_client)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Varta Exporter')
     parser.add_argument('host', help='IP-Adresse oder Hostname des Varta Speichers (z.B. 192.168.3.30)')
-    parser.add_argument('--prometheus-port', '-p', type=int, default=8000,
+    parser.add_argument('--prometheus-port', type=int, default=8000,
                         help='Prometheus HTTP Port (Default 8000)')
-    parser.add_argument('--interval', '-i', type=int, default=1,
+    parser.add_argument('--interval', type=int, default=1,
                         help='Abfrageintervall in Sekunden (Default 1)')
+    parser.add_argument('--mqtt', action='store_true', help='MQTT Exporter aktivieren')
+    parser.add_argument('--mqtt-host', type=str, default=None, help='Hostname oder IP des MQTT Brokers')
+    parser.add_argument('--mqtt-port', type=int, default=1883,)
+    parser.add_argument('--mqtt-username', type=str, default=None, help='MQTT Username')
+    parser.add_argument('--mqtt-password', type=str, default=None, help='MQTT Password')
     args = parser.parse_args()
-    main(args.host, args.prometheus_port, args.interval)
+    main(args.host, args.prometheus_port, args.interval, args.mqtt, args.mqtt_host, args.mqtt_port, args.mqtt_username, args.mqtt_password)

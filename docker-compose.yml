@@ -31,6 +31,23 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
 
+  mqtt-broker:
+    build:
+      context: .
+      dockerfile: mqtt-broker.Dockerfile
+    image: mqtt-broker:latest
+    container_name: mqtt-broker
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
   varta-exporter:
     build:
       context: .
@@ -42,7 +59,7 @@ services:
       - "8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: ["192.168.3.30"]
+    command: ["192.168.3.30 -mqtt"]
 
 volumes:
   prometheus-data:
