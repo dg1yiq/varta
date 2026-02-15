@@ -3,7 +3,7 @@ import time
 import urllib.request
 import urllib.error
 import argparse
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
@@ -119,6 +119,7 @@ def main(host: str, prometheus_port: int, interval: int):
 
     ems_conf_url = f'http://{host}/cgi/ems_conf.js'
     ems_data_url = f'http://{host}/cgi/ems_data.js'
+    energy_data_url = f'http://{host}/cgi/energy.js'
 
     js_wr_conf = None
     js_chrg_conf = None
@@ -127,6 +128,7 @@ def main(host: str, prometheus_port: int, interval: int):
 
     js_wr_data = None
     js_chrg_data = None
+    js_energy_data = None
 
     # Prometheus HTTP Server starten
     start_http_server(prometheus_port)
@@ -169,86 +171,160 @@ def main(host: str, prometheus_port: int, interval: int):
     except Exception as e:
         print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
 
+    nextrun = time.time() + interval
+    energy_nextrun = time.time() + 60  # Energie-Daten alle 60 Sekunden holen, da sie sich nicht so schnell ändern
+
     while True:
+        if time.time() < nextrun:
+            time.sleep(1)
+            continue
+
+        nextrun = time.time() + interval
+
         ems_data = ''
         try:
             ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
         except Exception as e:
-            print("X", end='', flush=True)
-            time.sleep(interval)
-            continue
+            print("A", end='', flush=True)
 
-        try:
-            # Check that ems_data containce the required data
-            if ems_data.find("WR_Data") == -1 or ems_data.find("Charger_Data") == -1 or ems_data == '':
+
+        energy_data = ''
+        if time.time() >= energy_nextrun:
+            energy_nextrun = time.time() + 60
+            energy_success = False
+            energy_count = 0
+            while energy_success == False or energy_count < 4:
+                energy_count += 1
+                try:
+                    energy_data = urllib.request.urlopen(energy_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+                    energy_success = True
+                except Exception as e:
+                    print("B", end='', flush=True)
+                    time.sleep(1)
+
+        final = {}
+
+        # Decodieren der Daten und Anlegen der finalen Struktur für die Gauges
+        if ems_data != '':
+            try:
+                # Check that ems_data containce the required data
+                if ems_data.find("WR_Data") == -1 or ems_data.find("Charger_Data") == -1 or ems_data == '':
+                    time.sleep(interval)
+                    continue
+
+                wr_data = ems_data[(ems_data.find("WR_Data")):]
+                wr_data = wr_data[:(wr_data.find(";"))]
+                wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
+
+                chrg_data = ems_data[(ems_data.find("Charger_Data")):]
+                chrg_data = chrg_data[:(chrg_data.find(";"))]
+                chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
+
+                # JSON erzeugen
+                js_wr_data = json.loads(wr_data)
+                js_chrg_data = json.loads(chrg_data)
+
+                # add WR_Data to final
+                final['Inverter'] = []
+                # Check if it is a list
+                if not isinstance(js_wr_data['WR_Data'], list):
+                    time.sleep(interval)
+                    continue
+
+                for x in range(0, (len(js_wr_data['WR_Data']))):
+                    # Append Key data to final
+                    final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
+
+                # Check that Charger_Data is a list
+                if not isinstance(js_chrg_data['Charger_Data'], list):
+                    time.sleep(interval)
+                    continue
+
+                for y in range(0, (len(js_chrg_data['Charger_Data']))):
+                    # For every Charger add an Arry to charger
+                    charger = []
+                    #
+                    for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
+                        battery = []
+                        battcount = 0
+                        if js_chrg_conf['Charger_Conf'][x] == 'BattData':
+                            # Check for Battery Elements
+                            for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
+                                if js_batt_conf['Batt_Conf'][z] == 'ModulData':
+                                    for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
+                                        module = []
+                                        modulecount = 0
+                                        for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
+                                            # Module Data
+                                            module.append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
+                                        final[f'Charger{y}_Battery{battcount}_Module{modulecount}'] = module
+                                        modulecount += 1
+                                else:
+                                    battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
+                            # Append Battery Data
+                            final[f'Charger{y}_Battery{battcount}'] = battery
+                            battcount += 1
+                        else:
+                            # Append Inverter Data
+                            charger.append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
+                    final[f'Charger{y}'] = charger
+
+                print(".", end='', flush=True)
+            except Exception as e:
+                print("E", end='', flush=True)
                 time.sleep(interval)
                 continue
 
-            wr_data = ems_data[(ems_data.find("WR_Data")):]
-            wr_data = wr_data[:(wr_data.find(";"))]
-            wr_data = '{"' + wr_data.replace(' = ', '":') + '}'
+        # Extract energy data and add it to final
 
-            chrg_data = ems_data[(ems_data.find("Charger_Data")):]
-            chrg_data = chrg_data[:(chrg_data.find(";"))]
-            chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
-
-            # JSON erzeugen
-            js_wr_data = json.loads(wr_data)
-            js_chrg_data = json.loads(chrg_data)
-
-            final = {}
-
-            # add WR_Data to final
-            final['Inverter'] = []
-            # Check if it is a list
-            if not isinstance(js_wr_data['WR_Data'], list):
-                time.sleep(interval)
-                continue
-
-            for x in range(0, (len(js_wr_data['WR_Data']))):
-                # Append Key data to final
-                final['Inverter'].append({js_wr_conf['WR_Conf'][x]:js_wr_data['WR_Data'][x]})
-
-            # Check that Charger_Data is a list
-            if not isinstance(js_chrg_data['Charger_Data'], list):
-                time.sleep(interval)
-                continue
-
-            for y in range(0, (len(js_chrg_data['Charger_Data']))):
-                # For every Charger add an Arry to charger
-                charger = []
-                #
-                for x in range(0, (len(js_chrg_data['Charger_Data'][y]))):
-                    battery = []
-                    battcount = 0
-                    if js_chrg_conf['Charger_Conf'][x] == 'BattData':
-                        # Check for Battery Elements
-                        for z in range(0, (len(js_chrg_data['Charger_Data'][y][x]))):
-                            if js_batt_conf['Batt_Conf'][z] == 'ModulData':
-                                for w in range(0, (len(js_chrg_data['Charger_Data'][y][x][z]))):
-                                    module = []
-                                    modulecount = 0
-                                    for v in range(0, (len(js_chrg_data['Charger_Data'][y][x][z][w]))):
-                                        # Module Data
-                                        module.append({js_modul_conf['Modul_Conf'][v]:js_chrg_data['Charger_Data'][y][x][z][w][v]})
-                                    final[f'Charger{y}_Battery{battcount}_Module{modulecount}'] = module
-                                    modulecount += 1
+        if energy_data != '':
+            try:
+                # energy_data contains lines like:
+                # EGrid_AC_DC = 8231983;
+                # Chrg_LoadCycles = [2,0];
+                # Wir parsen einfache Zuweisungen <name> = <number|[list]>; ohne komplexe Regex.
+                if energy_data and '=' in energy_data:
+                    final['Energy'] = []
+                    # split at semicolons to get individual assignments
+                    for part in energy_data.split(';'):
+                        part = part.strip()
+                        if not part:
+                            continue
+                        if '=' not in part:
+                            continue
+                        name, val_str = part.split('=', 1)
+                        name = name.strip()
+                        val_str = val_str.strip()
+                        # handle arrays like [1,2,3]
+                        if val_str.startswith('[') and val_str.endswith(']'):
+                            inner = val_str[1:-1].strip()
+                            if inner == '':
+                                arr = []
                             else:
-                                battery.append({js_batt_conf['Batt_Conf'][z]:js_chrg_data['Charger_Data'][y][x][z]})
-                        # Append Battery Data
-                        final[f'Charger{y}_Battery{battcount}'] = battery
-                        battcount += 1
-                    else:
-                        # Append Inverter Data
-                        charger.append({js_chrg_conf['Charger_Conf'][x]: js_chrg_data['Charger_Data'][y][x]})
-                final[f'Charger{y}'] = charger
-
-            print(".", end='', flush=True)
-
-        except Exception as e:
-            print("E", end='', flush=True)
-            time.sleep(interval)
-            continue
+                                try:
+                                    arr = [int(x.strip()) for x in inner.split(',') if x.strip() != '']
+                                except ValueError:
+                                    # fallback to floats if ints fail
+                                    try:
+                                        arr = [float(x.strip()) for x in inner.split(',') if x.strip() != '']
+                                    except ValueError:
+                                        continue
+                            final['Energy'].append({name: arr})
+                        else:
+                            # numeric value
+                            try:
+                                num = int(val_str)
+                            except ValueError:
+                                try:
+                                    num = float(val_str)
+                                except ValueError:
+                                    continue
+                            final['Energy'].append({name: num})
+                print("X", end='', flush=True)
+            except Exception as e:
+                print("F", end='', flush=True)
+                time.sleep(interval)
+                continue
 
         if struct is None:
             # Erster Zyklus: Struktur aus final erzeugen und Gauges anlegen
@@ -257,6 +333,29 @@ def main(host: str, prometheus_port: int, interval: int):
             # Optional sofort Gauges initial füllen
             write_gauges_from_children(gauge_children, struct)
         else:
+            # Prüfe ob sich die Struktur geändert hat (neue Metrics oder Types) und erweitere sie ggf.
+            try:
+                # Stelle sicher, dass gauge_children initialisiert sind
+                if gauge is None:
+                    gauge, gauge_children = create_gauges_from_structure(struct)
+
+                for metric, entries in final.items():
+                    # wenn neue Metric, lege Eintrag in gauge_children an
+                    if metric not in gauge_children:
+                        gauge_children[metric] = {}
+                    for e in entries:
+                        for type_name in e.keys():
+                            # Wenn child noch nicht existiert, erstelle es
+                            if gauge_children.get(metric, {}).get(type_name) is None:
+                                try:
+                                    child = gauge.labels(metric=metric, type=type_name)
+                                except Exception:
+                                    child = None
+                                gauge_children[metric][type_name] = child
+            except Exception:
+                # Wenn beim Erweitern etwas schief geht, ignoriere und fahre normal fort
+                pass
+
             # Folgende Zyklen: neue Werte an bestehende Struktur anhängen und Gauges aktualisieren
             append_final_to_structure(struct, final)
             write_gauges_from_children(gauge_children, struct)
@@ -270,7 +369,7 @@ if __name__ == '__main__':
     parser.add_argument('host', help='IP-Adresse oder Hostname des Varta Speichers (z.B. 192.168.3.30)')
     parser.add_argument('--prometheus-port', '-p', type=int, default=8000,
                         help='Prometheus HTTP Port (Default 8000)')
-    parser.add_argument('--interval', '-i', type=int, default=15,
-                        help='Abfrageintervall in Sekunden (Default 15)')
+    parser.add_argument('--interval', '-i', type=int, default=1,
+                        help='Abfrageintervall in Sekunden (Default 1)')
     args = parser.parse_args()
     main(args.host, args.prometheus_port, args.interval)

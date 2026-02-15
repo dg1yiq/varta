@@ -34,7 +34,7 @@ services:
   varta-exporter:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: varta_prometheus.Dockerfile
     image: varta-exporter:latest
     container_name: varta-exporter
     restart: always

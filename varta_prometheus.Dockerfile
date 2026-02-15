@@ -4,10 +4,10 @@ WORKDIR /usr/src/varta
 
 RUN pip install --no-cache-dir prometheus-client==0.23.1;
 
-COPY ./varta.py ./
+COPY ./varta_prometheus.py ./
 
 EXPOSE 8000/tcp
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# ENTRYPOINT: zusätzliche Argumente von `docker run` werden an varta.py übergeben
-ENTRYPOINT [ "python" , "varta.py"]
+# ENTRYPOINT: zusätzliche Argumente von `docker run` werden an varta_prometheus.py übergeben
+ENTRYPOINT [ "python" , "varta_prometheus.py"]
