@@ -22,11 +22,12 @@ RUN mkdir -p /var/run/mosquitto; \
 RUN echo "listener 1883 0.0.0.0" | tee -a /etc/mosquitto/mosquitto.conf; \
     echo "listener 9001 0.0.0.0" | tee -a /etc/mosquitto/mosquitto.conf; \
     echo "protocol websockets" | tee -a /etc/mosquitto/mosquitto.conf; \
-    echo "allow_anonymous true" | tee -a /etc/mosquitto/mosquitto.conf; \
-    echo "pid_file /var/run/mosquitto/mosquitto.pid" | tee -a /etc/mosquitto/mosquitto.conf;
+    echo "allow_anonymous true" | tee -a /etc/mosquitto/mosquitto.conf;
 
 EXPOSE 1883/tcp
 EXPOSE 9001/tcp
+
+USER mosquitto:mosquitto
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

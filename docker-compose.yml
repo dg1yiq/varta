@@ -59,7 +59,7 @@ services:
       - "8000:8000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: ["192.168.3.30 -mqtt"]
+    command: ["192.168.3.30", "--mqtt"]
 
 volumes:
   prometheus-data:
