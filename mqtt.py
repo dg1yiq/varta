@@ -2,6 +2,7 @@ import paho.mqtt.client as mqttclient
 from typing import Any, Iterable
 from pathlib import Path
 import uuid
+import json
 
 
 class MQTTClient():
@@ -72,7 +73,7 @@ class MQTTClient():
     # homeassistant/sensor/<device_id>/<sensor_id>/state
     def upstreamstate(self, deviceid:str = None, sensorid:str = None, state:str = None, retain:bool = False):
         if deviceid is not None and sensorid is not None and state is not None:
-            self.client.publish(topic=f"homeassistant/sensor/{deviceid}/{sensorid}/state",
+            self.client.publish(topic=f"/varta/{deviceid}/{sensorid}/state",
                                 payload=state,
                                 qos=0,
                                 retain=retain)
@@ -88,19 +89,19 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
 
     value = next((e['EGrid_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_AC_DC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="varta", sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
 
     value = next((e['EGrid_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_DC_AC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="varta", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
 
     value = next((e['EWr_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_AC_DC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="varta", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
 
     value = next((e['EWr_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_DC_AC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="varta", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid="elelemt", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
 
     u1 = next((e['U Verbund L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L1' in e), None)
     u2 = next((e['U Verbund L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L2' in e), None)
@@ -119,7 +120,7 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         p3 = u3 * i3/100
     if p1 and p2 and p3 is not None:
         p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="varta", sensorid="grid_power", state=str(p_total), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="grid_power", state=str(p_total), retain=False)
 
     u1 = next((e['U Insel L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L1' in e), None)
     u2 = next((e['U Insel L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L2' in e), None)
@@ -138,7 +139,7 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         p3 = u3 * i3 / 100
     if p1 and p2 and p3 is not None:
         p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="varta", sensorid="battery_power", state=str(p_total), retain=False)
+        mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
 
 
 def generate_mqtt_discovery(mqttclient: MQTTClient = None):
@@ -147,13 +148,13 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
         if deviceid is not None and sensorid is not None and name is not None:
             payload = {
                 "name": name,
-                "state_topic": f"homeassistant/sensor/{deviceid}/{sensorid}/state",
+                "state_topic": f"/varta/{deviceid}/{sensorid}/state",
                 "unique_id": f"{deviceid}_{sensorid}",
                 "unit_of_measurement": unit,
                 "device_class": device_class,
                 "state_class": state_class
             }
-            return str(payload)
+            return json.dumps(payload)
         else:
             print("MQTT: generate_mqtt_discovery - Missing parameters for discovery payload")
             return None
@@ -162,7 +163,7 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
         print("MQTT: generate_mqtt_discovery - No MQTT client provided")
         return
 
-    deviceid = "varta"
+    deviceid = "element"
 
     sensorid = "grid_ac_dc_work_total"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Netzbezug Total", unit="Wh", device_class="energy", state_class="total_increasing")
@@ -183,9 +184,9 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     # Grid Power = Positiv: Netzbezug, Negativ: Einspeisung
     sensorid = "grid_power"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Netzbezug", unit="W", device_class="power", state_class="measurement")
-    mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=False)
+    mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
 
     # Battery Power = Positiv: Entladung, Negativ: Ladung
     sensorid = "battery_power"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Batterieladung", unit="W", device_class="power", state_class="measurement")
-    mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=False)
+    mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
