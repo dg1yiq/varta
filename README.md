@@ -1,4 +1,4 @@
-Copyright (C) 2021, DG1YIQ
+Copyright (C) 2025, DG1YIQ
 
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -22,7 +22,7 @@ __URL for Prometheus Database:__ http://host.docker.internal:9090
 
 ## Home Assistant
 
-__URL or MQTT Broker:__ host.docker.internal:1883
+__URL for MQTT Broker:__ host.docker.internal:1883
 
 ## Konfiguration des Varta Exporters:
 
