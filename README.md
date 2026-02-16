@@ -14,13 +14,15 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ## What is this?
 
-This is a simple Programm to connect Varte Storage to Prometheus and Grafana and export important Metrics via MQTT to Home Assistant with auto Discovery.
+This is a simple Programm to connect Varte Storage to Prometheus with Grafana and also export important Metrics via MQTT to use in Home Assistant with auto Discovery.
 
-## Prometheus
+## Grafana
 
-__Attention:__ You need to adjust the `prometheus.yml` configuration file in the `./prometheus` folder to point to the Varta Storage Exporter!
+__URL for Prometheus Database:__ http://host.docker.internal:9090
 
-__URL für Prometheus Database:__ http://host.docker.internal:9090 welche in Grafana als Prometheus Datenquelle eingetragen werden muss.
+## Home Assistant
+
+__URL or MQTT Broker:__ host.docker.internal:1883
 
 ## Konfiguration des Varta Exporters:
 
