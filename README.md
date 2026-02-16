@@ -14,68 +14,38 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ## What is this?
 
-This is a simple Programm to connect Varte Storage to Prometheus and Grafana.
+This is a simple Programm to connect Varte Storage to Prometheus and Grafana and export important Metrics via MQTT to Home Assistant with auto Discovery.
 
 ## Prometheus
 
 __Attention:__ You need to adjust the `prometheus.yml` configuration file in the `./prometheus` folder to point to the Varta Storage Exporter!
 
-__URL für Prometheus Database:__ http://host.docker.internal:9090
+__URL für Prometheus Database:__ http://host.docker.internal:9090 welche in Grafana als Prometheus Datenquelle eingetragen werden muss.
 
-## Docker Compose File docker-compose.yml
+## Konfiguration des Varta Exporters:
+
+Bitte in der Docker Compose bitte die Startparameter des Varta Exporters anpassen, damit die Verbindung zum Varta Storage hergestellt werden kann. Durch entfernen des `--mqtt` Parameters werden die MQTT Export Funktionalitäten deaktiviert.
+
+Varte Speicher IP Adresse: `192.168.3.30' mit aktivierten MQTT Export:
 
 ```
-version: "3.8"
-
-services:
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    restart: always
-    ports:
-      - "9090:9090"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      # 3 Jahre Retention:
-      - "--storage.tsdb.retention.time=1095d"
-      # Optional: zusätzliches Größenlimit (verhindert volle Disk)
-      # - "--storage.tsdb.retention.size=100GB"
-    volumes:
-      - prometheus-data:/prometheus
-      - ./prometheus:/etc/prometheus
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    restart: always
-    ports:
-      - "3000:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - grafana-data:/var/lib/grafana
-
-  varta-exporter:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: varta-exporter:latest
-    container_name: varta-exporter
-    restart: always
-    ports:
-      - "8000:8000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: ["192.168.3.30"]
-
-olumes:
-  prometheus-data:
-    name: prometheus-data
-  grafana-data:
-    name: grafana-data
+command: ["192.168.3.30", "--mqtt"]
 ```
 
-Starten mit `docker-compose up -d`
+Varta Speicher IP Adresse: `10.0.0.10' ohne MQTT Export:
+
+```
+command: ["10.0.0.10"]
+```
+
+## Starten des Containers:
+
+```bash
+docker compose up -d
+```
+
+## Beenden des Containers:
+
+```bash
+docker compose down
+```
