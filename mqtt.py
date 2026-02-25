@@ -113,18 +113,19 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
     if u1 is not None and i1 is not None:
         p1 = u1 * i1/100
     else:
-        p1 = 0
+        p1 = None
     if u2 is not None and i2 is not None:
         p2 = u2 * i2/100
     else:
-        p2 = 0
+        p2 = None
     if u3 is not None and i3 is not None:
         p3 = u3 * i3/100
     else:
-        p3 = 0
+        p3 = None
 
-    p_total = (p1 + p2 + p3) * -1
-    mqttclient.upstreamstate(deviceid="element", sensorid="grid_power", state=str(p_total), retain=False)
+    if p1 is not None and p2 is not None and p3 is not None:
+        p_total = (p1 + p2 + p3) * -1
+        mqttclient.upstreamstate(deviceid="element", sensorid="grid_power", state=str(p_total), retain=False)
 
     u1 = next((e['U Insel L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L1' in e), None)
     u2 = next((e['U Insel L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L2' in e), None)
@@ -136,29 +137,26 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
     if u1 is not None and i1 is not None:
         p1 = u1 * i1 / 100
     else:
-        p1 = 0
+        p1 = None
     if u2 is not None and i2 is not None:
         p2 = u2 * i2 / 100
     else:
-        p2 = 0
+        p2 = None
     if u3 is not None and i3 is not None:
         p3 = u3 * i3 / 100
     else:
-        p3 = 0
+        p3 = None
 
-    p_total = (p1 + p2 + p3) * -1
-    mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
+    if p1 is not None and p2 is not None and p3 is not None:
+        p_total = (p1 + p2 + p3) * -1
+        mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
 
     soc1 = next((e['SOC_GS'] for e in werte.get('Charger0', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
     soc2 = next((e['SOC_GS'] for e in werte.get('Charger1', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
 
-    if soc1 is None:
-        soc1 = 0
-    if soc2 is None:
-        soc2 = 0
-
-    soc = (soc1 + soc2) / 2
-    mqttclient.upstreamstate(deviceid="element", sensorid="state_of_charge", state=str(soc), retain=False)
+    if soc1 is not None and soc2 is not None:
+        soc = (soc1 + soc2) / 2
+        mqttclient.upstreamstate(deviceid="element", sensorid="state_of_charge", state=str(soc), retain=False)
 
 def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     def dicoverypayload(deviceid: str = None, sensorid: str = None, name: str = None, unit: str = None,
