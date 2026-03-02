@@ -37,6 +37,7 @@ services:
       dockerfile: mqtt-broker.Dockerfile
     image: mqtt-broker:latest
     container_name: mqtt-broker
+    pull_policy: never
     restart: always
     ports:
       - "1883:1883"
