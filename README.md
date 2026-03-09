@@ -44,10 +44,14 @@ command: ["10.0.0.10"]
 
 ```bash
 docker compose up -d
+oder
+docker-compose up -d
 ```
 
 ## Beenden des Containers:
 
 ```bash
 docker compose down
+oder
+docker-compose down
 ```
