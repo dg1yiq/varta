@@ -52,7 +52,7 @@ services:
   varta-exporter:
     build:
       context: .
-      dockerfile: varta_prometheus.Dockerfile
+      dockerfile: varta_element.Dockerfile
     image: varta-exporter:latest
     container_name: varta-exporter
     pull_policy: never

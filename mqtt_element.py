@@ -216,4 +216,4 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     sensorid = "state_of_charge"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Ladezustand", unit="%", device_class="battery", state_class="measurement")
     mqttclient.upstreamdiscovery(deviceid=deviceid, sensorid=sensorid, config=payload, retain=True)
-    
+

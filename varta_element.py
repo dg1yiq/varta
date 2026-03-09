@@ -1,13 +1,11 @@
 import json
 import time
-# import urllib.request
-# import urllib.error
 from requests import Response, Session
 import argparse
 import re
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
-from mqtt import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
+from mqtt_element import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
 
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an

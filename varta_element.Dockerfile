@@ -15,4 +15,4 @@ RUN mkdir -p /usr/src/donorgw; \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ENTRYPOINT: zusätzliche Argumente von `docker run` werden an varta_prometheus.py übergeben
-ENTRYPOINT [ "python" , "varta.py"]
+ENTRYPOINT [ "python" , "varta_element.py"]
