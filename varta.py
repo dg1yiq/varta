@@ -159,6 +159,9 @@ def main(host: str,
 
     print(f'\nStarte Varta Exporter für Speicher: {host} auf Prometheus Port {prometheus_port} mit Intervall {interval} Sekunden.')
 
+    if varta_password:
+        print(f'Mit Varta User: {varta_user} und Passwort: {varta_password}')
+
     mqtt_client = None
 
     if mqtt is True:
