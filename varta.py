@@ -9,7 +9,6 @@ from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
 from mqtt import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
 
-ERROR_TEMPLATE = "An error occurred while polling {}. Please check your connection"
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
 def append_final_to_structure(structure: Dict[str, List[Dict[str, List[Any]]]],
@@ -153,7 +152,7 @@ def main(host: str,
                 _check_logged_in()
             return session.get(url, timeout=3)
         except Exception as e:
-            raise ValueError(ERROR_TEMPLATE) from e
+            raise ValueError(f"Error Gettings Data from {url}") from e
 
     if not host:
         raise SystemExit('Fehler: Das Argument `host` ist zwingend erforderlich.')
@@ -196,7 +195,7 @@ def main(host: str,
             response = _request_data(ems_conf_url)
             response.raise_for_status()
         except Exception as e:
-            raise ValueError(ERROR_TEMPLATE.format(ems_conf_url)) from e
+            raise ValueError(f"Error Gettings Data from {ems_conf_url}") from e
 
         ems_conf = response.text.replace('\n', '')
 
