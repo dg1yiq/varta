@@ -1,12 +1,15 @@
 import json
 import time
-import urllib.request
-import urllib.error
+# import urllib.request
+# import urllib.error
+from requests import Response, Session
 import argparse
+import re
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
 from mqtt import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
 
+ERROR_TEMPLATE = "An error occurred while polling {}. Please check your connection"
 
 # Neue Funktion: hänge `final`-Werte in die bestehende Struktur an
 def append_final_to_structure(structure: Dict[str, List[Dict[str, List[Any]]]],
@@ -120,7 +123,38 @@ def main(host: str,
          mqtt_host: str = None,
          mqtt_port: int = 1883,
          mqtt_username: str = None,
-         mqtt_password: str = None):
+         mqtt_password: str = None,
+         varta_user: str = "user1",
+         varta_password: str = None) -> None:
+
+    session = Session()
+
+    def _check_logged_in():
+        pass_url = f"http://{host}/cgi/login"
+        response = session.get(pass_url, timeout=3)
+        response.raise_for_status()
+
+        values = re.compile("userlevel = ([0-9]+)")
+        results = values.findall(response.text)
+        if "2" in results:
+            # already logged in
+            return True
+
+        login_data = {"user": varta_user, "password": varta_password}
+        response = session.post(pass_url, login_data, timeout=3)
+        response.raise_for_status()
+        return response.status_code == 200
+
+    def _request_data(url) -> Response:
+        try:
+            # Check if a password is set
+            if varta_password:
+                # Password is set so we check if already logged in
+                _check_logged_in()
+            return session.get(url, timeout=3)
+        except Exception as e:
+            raise ValueError(ERROR_TEMPLATE) from e
+
     if not host:
         raise SystemExit('Fehler: Das Argument `host` ist zwingend erforderlich.')
 
@@ -157,7 +191,14 @@ def main(host: str,
     # einmal Konfiguration holen und Gauges anlegen
     try:
         # EMS Konfigurationsdaten holen
-        ems_conf = urllib.request.urlopen(ems_conf_url, timeout=10).read().decode('utf-8').replace('\n', '')
+        # ems_conf = urllib.request.urlopen(ems_conf_url, timeout=10).read().decode('utf-8').replace('\n', '')
+        try:
+            response = _request_data(ems_conf_url)
+            response.raise_for_status()
+        except Exception as e:
+            raise ValueError(ERROR_TEMPLATE.format(ems_conf_url)) from e
+
+        ems_conf = response.text.replace('\n', '')
 
         # WR Daten aus EMS Daten extrahieren und zu JSON Format anpassen
         wr_conf = ems_conf[(ems_conf.find("WR_Conf")):]
@@ -203,7 +244,10 @@ def main(host: str,
         # EMS Daten holen, da sie sich schnell ändern können, aber nur einmal pro Zyklus
         ems_data = ''
         try:
-            ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+            # ems_data = urllib.request.urlopen(ems_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+            response = _request_data(ems_data_url)
+            response.raise_for_status()
+            ems_data = response.text.replace('\n', '')
         except Exception as e:
             print("A", end='', flush=True)
 
@@ -216,7 +260,10 @@ def main(host: str,
             while energy_success == False or energy_count < 4:
                 energy_count += 1
                 try:
-                    energy_data = urllib.request.urlopen(energy_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+                    # energy_data = urllib.request.urlopen(energy_data_url, timeout=10).read().decode('utf-8').replace('\n', '')
+                    response = _request_data(energy_data_url)
+                    response.raise_for_status()
+                    energy_data = response.text.replace('\n', '')
                     energy_success = True
                 except Exception as e:
                     print("B", end='', flush=True)
@@ -393,5 +440,7 @@ if __name__ == '__main__':
     parser.add_argument('--mqtt-port', type=int, default=1883,)
     parser.add_argument('--mqtt-username', type=str, default=None, help='MQTT Username')
     parser.add_argument('--mqtt-password', type=str, default=None, help='MQTT Password')
+    parser.add_argument('--varta-user', type=str, default="user1", help='Varta User (Default: user1)')
+    parser.add_argument('--varta-password', type=str, default=None, help='Varta Password')
     args = parser.parse_args()
-    main(args.host, args.prometheus_port, args.interval, args.mqtt, args.mqtt_host, args.mqtt_port, args.mqtt_username, args.mqtt_password)
+    main(args.host, args.prometheus_port, args.interval, args.mqtt, args.mqtt_host, args.mqtt_port, args.mqtt_username, args.mqtt_password, args.varta_user, args.varta_password)
