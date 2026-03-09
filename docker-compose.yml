@@ -55,6 +55,7 @@ services:
       dockerfile: varta_prometheus.Dockerfile
     image: varta-exporter:latest
     container_name: varta-exporter
+    pull_policy: never
     restart: always
     ports:
       - "8000:8000"
