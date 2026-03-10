@@ -6,7 +6,7 @@ from requests import Response, Session
 import argparse
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge
-from pulse.mqtt_pulse import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
+from mqtt_pulse import MQTTClient, generate_mqtt_uplink, generate_mqtt_discovery
 
 
 def _try_json_loads_maybe(value: Any) -> Any:
