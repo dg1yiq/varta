@@ -1,0 +1,70 @@
+version: "3.8"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      # 3 Jahre Retention:
+      - "--storage.tsdb.retention.time=1095d"
+      # Optional: zusätzliches Größenlimit (verhindert volle Disk)
+      # - "--storage.tsdb.retention.size=100GB"
+    volumes:
+      - prometheus-data:/prometheus
+      - ./prometheus:/etc/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  mqtt-broker:
+    build:
+      context: .
+      dockerfile: mqtt-broker.Dockerfile
+    image: mqtt-broker:latest
+    container_name: mqtt-broker
+    pull_policy: never
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  varta-exporter:
+    build:
+      context: .
+      dockerfile: varta_pulse.Dockerfile
+    image: varta-exporter:latest
+    container_name: varta-exporter
+    pull_policy: never
+    restart: always
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["192.168.1.2", "--mqtt"]
+
+volumes:
+  prometheus-data:
+    name: prometheus-data
+  grafana-data:
+    name: grafana-data
