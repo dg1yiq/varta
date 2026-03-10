@@ -111,7 +111,7 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
     mqttclient.upstreamstate(deviceid="pulse", sensorid="grid_power", state=str(p_total), retain=False)
 
     p_total = next((e['activePowerAc_W'] for e in werte.get('pulse.procImg', []) if isinstance(e, dict) and 'activePowerAc_W' in e), None)
-    mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_power", state=str(p_total), retain=False)
+    mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_power", state=str((p_total * -1)), retain=False)
 
     soc = next((e['soc_pct'] for e in werte.get('pulse.procImg', []) if isinstance(e, dict) and 'soc_pct' in e), None)
     mqttclient.upstreamstate(deviceid="pulse", sensorid="state_of_charge", state=str(soc), retain=False)
