@@ -87,76 +87,34 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         print("MQTT: generate_mqtt_discovery - No MQTT client provided")
         return
 
-    value = next((e['EGrid_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_AC_DC' in e), None)
+    value = next((e['energyCounterHouseIn_Ws'] for e in werte.get('pulse.procImg.counters', []) if isinstance(e, dict) and 'energyCounterHouseIn_Ws' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
+        value = value / 3600 # Convert from Ws to Wh
+        mqttclient.upstreamstate(deviceid="pulse", sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
 
-    value = next((e['EGrid_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_DC_AC' in e), None)
+    value = next((e['energyCounterHouseOut_Ws'] for e in werte.get('pulse.procImg.counters', []) if isinstance(e, dict) and 'energyCounterHouseOut_Ws' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
+        value = value / 3600 # Convert from Ws to Wh
+        mqttclient.upstreamstate(deviceid="pulse", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
 
-    value = next((e['EWr_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_AC_DC' in e), None)
+    value = next((e['energyCounterAcIn_Ws'] for e in werte.get('grid_dc_ac_work_total', []) if isinstance(e, dict) and 'energyCounterAcIn_Ws' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
+        value = value / 3600 # Convert from Ws to Wh
+        mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
 
-    value = next((e['EWr_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_DC_AC' in e), None)
+    value = next((e['energyCounterAcOut_Ws'] for e in werte.get('grid_dc_ac_work_total', []) if isinstance(e, dict) and 'energyCounterAcOut_Ws' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
+        value = value / 3600 # Convert from Ws to Wh
+        mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
 
-    u1 = next((e['U Verbund L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L1' in e), None)
-    u2 = next((e['U Verbund L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L2' in e), None)
-    u3 = next((e['U Verbund L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L3' in e), None)
-    i1 = next((e['I Verbund L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Verbund L1' in e), None)
-    i2 = next((e['I Verbund L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Verbund L2' in e), None)
-    i3 = next((e['I Verbund L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Verbund L3' in e), None)
+    p_total = next((e['gridPower_W'] for e in werte.get('pulse.procImg', []) if isinstance(e, dict) and 'gridPower_W' in e), None)
+    mqttclient.upstreamstate(deviceid="pulse", sensorid="grid_power", state=str(p_total), retain=False)
 
-    if u1 is not None and i1 is not None:
-        p1 = u1 * i1/100
-    else:
-        p1 = None
-    if u2 is not None and i2 is not None:
-        p2 = u2 * i2/100
-    else:
-        p2 = None
-    if u3 is not None and i3 is not None:
-        p3 = u3 * i3/100
-    else:
-        p3 = None
+    p_total = next((e['activePowerAc_W'] for e in werte.get('pulse.procImg', []) if isinstance(e, dict) and 'activePowerAc_W' in e), None)
+    mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_power", state=str(p_total), retain=False)
 
-    if p1 is not None and p2 is not None and p3 is not None:
-        p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_power", state=str(p_total), retain=False)
-
-    u1 = next((e['U Insel L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L1' in e), None)
-    u2 = next((e['U Insel L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L2' in e), None)
-    u3 = next((e['U Insel L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L3' in e), None)
-    i1 = next((e['I Insel L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Insel L1' in e), None)
-    i2 = next((e['I Insel L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Insel L2' in e), None)
-    i3 = next((e['I Insel L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'I Insel L3' in e), None)
-
-    if u1 is not None and i1 is not None:
-        p1 = u1 * i1 / 100
-    else:
-        p1 = None
-    if u2 is not None and i2 is not None:
-        p2 = u2 * i2 / 100
-    else:
-        p2 = None
-    if u3 is not None and i3 is not None:
-        p3 = u3 * i3 / 100
-    else:
-        p3 = None
-
-    if p1 is not None and p2 is not None and p3 is not None:
-        p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
-
-    soc1 = next((e['SOC_GS'] for e in werte.get('Charger0', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
-    soc2 = next((e['SOC_GS'] for e in werte.get('Charger1', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
-
-    if soc1 is not None and soc2 is not None:
-        soc = (soc1 + soc2) / 2
-        mqttclient.upstreamstate(deviceid="element", sensorid="state_of_charge", state=str(soc), retain=False)
+    soc = next((e['soc_pct'] for e in werte.get('pulse.procImg', []) if isinstance(e, dict) and 'soc_pct' in e), None)
+    mqttclient.upstreamstate(deviceid="pulse", sensorid="state_of_charge", state=str(soc), retain=False)
 
 def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     def dicoverypayload(deviceid: str = None, sensorid: str = None, name: str = None, unit: str = None,
@@ -171,7 +129,7 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
                 "state_class": state_class,
                 "device": {
                     "identifiers": [deviceid],
-                    "name": "Varta Element",
+                    "name": "Varta Pulse",
                     "manufacturer": "Varta"
                 }
             }
@@ -184,7 +142,7 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
         print("MQTT: generate_mqtt_discovery - No MQTT client provided")
         return
 
-    deviceid = "element"
+    deviceid = "pulse"
 
     sensorid = "grid_ac_dc_work_total"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Netzbezug Total", unit="Wh", device_class="energy", state_class="total_increasing")
