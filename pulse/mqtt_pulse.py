@@ -97,12 +97,12 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         value = value / 3600 # Convert from Ws to Wh
         mqttclient.upstreamstate(deviceid="pulse", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
 
-    value = next((e['energyCounterAcIn_Ws'] for e in werte.get('grid_dc_ac_work_total', []) if isinstance(e, dict) and 'energyCounterAcIn_Ws' in e), None)
+    value = next((e['energyCounterAcIn_Ws'] for e in werte.get('pulse.procImg.counters', []) if isinstance(e, dict) and 'energyCounterAcIn_Ws' in e), None)
     if value is not None:
         value = value / 3600 # Convert from Ws to Wh
         mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
 
-    value = next((e['energyCounterAcOut_Ws'] for e in werte.get('grid_dc_ac_work_total', []) if isinstance(e, dict) and 'energyCounterAcOut_Ws' in e), None)
+    value = next((e['energyCounterAcOut_Ws'] for e in werte.get('pulse.procImg.counters', []) if isinstance(e, dict) and 'energyCounterAcOut_Ws' in e), None)
     if value is not None:
         value = value / 3600 # Convert from Ws to Wh
         mqttclient.upstreamstate(deviceid="pulse", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
