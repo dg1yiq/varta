@@ -4,8 +4,8 @@ WORKDIR /usr/src/varta
 
 RUN pip install --no-cache-dir prometheus-client==0.23.1 paho-mqtt==2.1.0 requests==2.32.5;
 
-COPY ./varta.py ./
-COPY ./mqtt.py ./
+COPY ./varta_element.py ./
+COPY ./mqtt_element.py ./
 
 EXPOSE 8000/tcp
 
