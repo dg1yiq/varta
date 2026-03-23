@@ -121,6 +121,7 @@ def main(host: str,
          mqtt_port: int = 1883,
          mqtt_username: str = None,
          mqtt_password: str = None,
+         mqtt_deviceid: str = "element",
          varta_user: str = "user1",
          varta_password: str = None) -> None:
 
@@ -164,7 +165,7 @@ def main(host: str,
 
     if mqtt is True:
         print(f'Main: MQTT Exporter aktiviert')
-        mqtt_client = MQTTClient(hostname=mqtt_host, port=mqtt_port, username=mqtt_username, password=mqtt_password)
+        mqtt_client = MQTTClient(hostname=mqtt_host, port=mqtt_port, username=mqtt_username, password=mqtt_password, deviceid=mqtt_deviceid)
         mqtt_client.client.loop_start()
         generate_mqtt_discovery(mqtt_client)
 
@@ -216,15 +217,31 @@ def main(host: str,
         batt_conf = '{"' + batt_conf.replace(' = ', '":') + '}'
 
         # MODUL Daten aus EMS Daten extrahieren und zu JSON Format anpassen
-        modul_conf = ems_conf[(ems_conf.find("Modul_Conf")):]
-        modul_conf = modul_conf[:(modul_conf.find(";"))]
-        modul_conf = '{"' + modul_conf.replace(' = ', '":') + '}'
+        # Check if Modul_Conf exists, because it is only present in newer Varta firmwares
+        if ems_conf.find("Modul_Conf") == -1:
+            print("Warnung: Modul_Conf nicht in EMS Konfiguration gefunden.")
+            modul_conf = '{"Modul_Conf": []}'
+        else:
+            modul_conf = ems_conf[(ems_conf.find("Modul_Conf")):]
+            modul_conf = modul_conf[:(modul_conf.find(";"))]
+            modul_conf = '{"' + modul_conf.replace(' = ', '":') + '}'
+
+        # EMeter Daten aus EMS Daten extrahieren und zu JSON Format anpassen
+        # Check if EMeter_Conf exists, because it is only present in newer Varta
+        if ems_conf.find("EMeter_Conf") == -1:
+            print("Warnung: EMeter_Conf nicht in EMS Konfiguration gefunden.")
+            emeter_conf = '{"EMeter_Conf": []}'
+        else:
+            emeter_conf = ems_conf[(ems_conf.find("EMeter_Conf")):]
+            emeter_conf = emeter_conf[:(emeter_conf.find(";"))]
+            emeter_conf = '{"' + emeter_conf.replace(' = ', '":') + '}'
 
         # JSON erzeugen
         js_wr_conf = json.loads(wr_conf)
         js_chrg_conf = json.loads(chrg_conf)
         js_batt_conf = json.loads(batt_conf)
         js_modul_conf = json.loads(modul_conf)
+        js_emeter_conf = json.loads(emeter_conf)
 
     except Exception as e:
         print("Fehler beim holen der EMS Konfigurationsdaten! - %s" % str(e))
@@ -286,6 +303,19 @@ def main(host: str,
                 chrg_data = ems_data[(ems_data.find("Charger_Data")):]
                 chrg_data = chrg_data[:(chrg_data.find(";"))]
                 chrg_data = '{"' + chrg_data.replace(' = ', '":') + '}'
+
+                # Check if EMETER_Data is present, because it is only present in newer Varta firmwares
+                if ems_data.find("EMETER_Data") != -1:
+                    emeter_data = ems_data[(ems_data.find("EMETER_Data")):]
+                    emeter_data = emeter_data[:(emeter_data.find(";"))]
+                    emeter_data = '{"' + emeter_data.replace(' = ', '":') + '}'
+                    js_emeter_data = json.loads(emeter_data)
+                    final['EMeter'] = []
+                    # Check if it is a list
+                    if isinstance(js_emeter_data['EMETER_Data'], list):
+                        for x in range(0, (len(js_emeter_data['EMETER_Data']))):
+                            # Append Key data to final
+                            final['EMeter'].append({js_emeter_conf['EMeter_Conf'][x]: js_emeter_data['EMETER_Data'][x]})
 
                 # JSON erzeugen
                 js_wr_data = json.loads(wr_data)
@@ -440,7 +470,8 @@ if __name__ == '__main__':
     parser.add_argument('--mqtt-port', type=int, default=1883,)
     parser.add_argument('--mqtt-username', type=str, default=None, help='MQTT Username')
     parser.add_argument('--mqtt-password', type=str, default=None, help='MQTT Password')
+    parser.add_argument('--mqtt-deviceid', type=str, default="element", help='MQTT Topic (Default: element)')
     parser.add_argument('--varta-user', type=str, default="user1", help='Varta User (Default: user1)')
     parser.add_argument('--varta-password', type=str, default=None, help='Varta Password')
     args = parser.parse_args()
-    main(args.host, args.prometheus_port, args.interval, args.mqtt, args.mqtt_host, args.mqtt_port, args.mqtt_username, args.mqtt_password, args.varta_user, args.varta_password)
+    main(args.host, args.prometheus_port, args.interval, args.mqtt, args.mqtt_host, args.mqtt_port, args.mqtt_username, args.mqtt_password, args.mqtt_deviceid, args.varta_user, args.varta_password)

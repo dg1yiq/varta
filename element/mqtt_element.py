@@ -24,10 +24,11 @@ class MQTTClient():
         else:
             print("MQTT: Verbindung fehlgeschlagen mit Code #%s..." % str(rc))
 
-    def __init__(self, hostname:str = None, port:int = 1883, username:str = None, password:str = None):
+    def __init__(self, hostname:str = None, port:int = 1883, username:str = None, password:str = None, deviceid:str = "element"):
         # Cleint ID set to Varta + random suffix (letzte 4 Hex-Zeichen) to avoid conflicts with other clients
         # Achtung: nur 4 Zeichen reduziert die Einzigartigkeit stark; bei Bedarf mehr Zeichen verwenden.
         self.id = "Varta" + uuid.uuid4().hex[-4:]
+        self.deviceid = deviceid
         self.client = mqttclient.Client(client_id=self.id)
         self.client.on_disconnect = self.on_disconnect
         self.client.on_connect = self.on_connect
@@ -87,21 +88,23 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
         print("MQTT: generate_mqtt_discovery - No MQTT client provided")
         return
 
+    deviceid = mqttclient.deviceid
+
     value = next((e['EGrid_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_AC_DC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="grid_ac_dc_work_total", state=str(value), retain=False)
 
     value = next((e['EGrid_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EGrid_DC_AC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="grid_dc_ac_work_total", state=str(value), retain=False)
 
     value = next((e['EWr_AC_DC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_AC_DC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="battery_ac_dc_work_total", state=str(value), retain=False)
 
     value = next((e['EWr_DC_AC'] for e in werte.get('Energy', []) if isinstance(e, dict) and 'EWr_DC_AC' in e), None)
     if value is not None:
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="battery_dc_ac_work_total", state=str(value), retain=False)
 
     u1 = next((e['U Verbund L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L1' in e), None)
     u2 = next((e['U Verbund L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Verbund L2' in e), None)
@@ -125,7 +128,32 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
 
     if p1 is not None and p2 is not None and p3 is not None:
         p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="element", sensorid="grid_power", state=str(p_total), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="grid_power", state=str(p_total), retain=False)
+
+    # Grid Power from
+    u1 = next((e['U_V_L1'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'U_V_L1' in e),None)
+    u2 = next((e['U_V_L2'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'U_V_L2' in e),None)
+    u3 = next((e['U_V_L3'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'U_V_L3' in e),None)
+    i1 = next((e['Iw_V_L1'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'Iw_V_L1' in e),None)
+    i2 = next((e['Iw_V_L2'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'Iw_V_L2' in e),None)
+    i3 = next((e['Iw_V_L3'] for e in werte.get('EMeter', []) if isinstance(e, dict) and 'Iw_V_L3' in e),None)
+
+    if u1 is not None and i1 is not None:
+        p1 = u1 * i1 / 100
+    else:
+        p1 = None
+    if u2 is not None and i2 is not None:
+        p2 = u2 * i2 / 100
+    else:
+        p2 = None
+    if u3 is not None and i3 is not None:
+        p3 = u3 * i3 / 100
+    else:
+        p3 = None
+
+    if p1 is not None and p2 is not None and p3 is not None:
+        p_total = (p1 + p2 + p3) * -1
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="grid_power", state=str(p_total), retain=False)
 
     u1 = next((e['U Insel L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L1' in e), None)
     u2 = next((e['U Insel L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U Insel L2' in e), None)
@@ -149,14 +177,45 @@ def generate_mqtt_uplink(werte: dict = None, mqttclient: MQTTClient = None):
 
     if p1 is not None and p2 is not None and p3 is not None:
         p_total = (p1 + p2 + p3) * -1
-        mqttclient.upstreamstate(deviceid="element", sensorid="battery_power", state=str(p_total), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="battery_power", state=str(p_total), retain=False)
+
+    u1 = next((e['U_Insel_L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U_Insel_L1' in e), None)
+    u2 = next((e['U_Insel_L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U_Insel_L2' in e), None)
+    u3 = next((e['U_Insel_L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'U_Insel_L3' in e), None)
+    i1 = next((e['Is_Insel_L1'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'Is_Insel_L1' in e), None)
+    i2 = next((e['Is_Insel_L2'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'Is_Insel_L2' in e), None)
+    i3 = next((e['Is_Insel_L3'] for e in werte.get('Inverter', []) if isinstance(e, dict) and 'Is_Insel_L3' in e), None)
+
+    if u1 is not None and i1 is not None:
+        p1 = u1 * i1 / 100
+    else:
+        p1 = None
+    if u2 is not None and i2 is not None:
+        p2 = u2 * i2 / 100
+    else:
+        p2 = None
+    if u3 is not None and i3 is not None:
+        p3 = u3 * i3 / 100
+    else:
+        p3 = None
+
+    if p1 is not None and p2 is not None and p3 is not None:
+        p_total = (p1 + p2 + p3) * -1
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="battery_power", state=str(p_total), retain=False)
 
     soc1 = next((e['SOC_GS'] for e in werte.get('Charger0', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
     soc2 = next((e['SOC_GS'] for e in werte.get('Charger1', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
+    soc3 = next((e['SOC_GS'] for e in werte.get('Charger2', []) if isinstance(e, dict) and 'SOC_GS' in e), None)
 
-    if soc1 is not None and soc2 is not None:
+    if soc1 is not None and soc2 is None and soc3 is None:
+        soc = soc1
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="state_of_charge", state=str(soc), retain=False)
+    elif soc1 is not None and soc2 is not None and soc3 is None:
         soc = (soc1 + soc2) / 2
-        mqttclient.upstreamstate(deviceid="element", sensorid="state_of_charge", state=str(soc), retain=False)
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="state_of_charge", state=str(soc), retain=False)
+    elif soc1 is not None and soc2 is not None and soc3 is not None:
+        soc = (soc1 + soc2 + soc3) / 3
+        mqttclient.upstreamstate(deviceid=deviceid, sensorid="state_of_charge", state=str(soc), retain=False)
 
 def generate_mqtt_discovery(mqttclient: MQTTClient = None):
     def dicoverypayload(deviceid: str = None, sensorid: str = None, name: str = None, unit: str = None,
@@ -184,7 +243,7 @@ def generate_mqtt_discovery(mqttclient: MQTTClient = None):
         print("MQTT: generate_mqtt_discovery - No MQTT client provided")
         return
 
-    deviceid = "element"
+    deviceid = mqttclient.deviceid
 
     sensorid = "grid_ac_dc_work_total"
     payload = dicoverypayload(deviceid=deviceid, sensorid=sensorid, name="Netzbezug Total", unit="Wh", device_class="energy", state_class="total_increasing")
